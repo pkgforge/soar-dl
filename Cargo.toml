@@ -1,0 +1,29 @@
+[package]
+name = "soar-dl"
+version = "0.1.0"
+authors = ["Rabindra Dhakal <contact@qaidvoid.dev>"]
+description = "A fast download manager"
+license = "MIT"
+edition = "2021"
+repository = "https://github.com/pkgforge/soar-dl"
+keywords = ["download-manager", "binary", "github", "gitlab", "direct"]
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[features]
+binary = ["clap", "indicatif"]
+
+[dependencies]
+clap = { version = "4.5.21", features = ["cargo", "derive"], optional = true }
+futures = "0.3.31"
+indicatif = { version = "0.17.9", optional = true }
+regex = { version = "1.11.1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }
+reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "stream", "http2", "blocking", "json"] }
+serde = { version = "1.0.215", features = ["derive"] }
+tokio = { version = "1.41.1", features = ["macros", "rt-multi-thread"] }
+url = "2.5.4"
