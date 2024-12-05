@@ -1,0 +1,86 @@
+name: soar-dl nightly
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  
+
+permissions:
+  contents: write
+
+jobs:
+  remove-nightly-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove existing nightly tag
+        run: |
+          gh release delete nightly --cleanup-tag || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  publish-nightly:
+    name: Publish nightly binaries
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - {
+              NAME: x86_64-linux,
+              TARGET: x86_64-unknown-linux-musl,
+            }
+          - {
+              NAME: aarch64-linux,
+              TARGET: aarch64-unknown-linux-musl,
+            }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version info
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=nightly-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            --allow-unauthenticated musl-tools b3sum
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.build.TARGET }}
+
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: ${{ matrix.build.TARGET }}
+
+      - name: Build
+        run: SOAR_NIGHTLY=1 cargo build -F binary --release --locked --target ${{ matrix.build.TARGET }}
+
+      - name: Prepare nightly binary
+        shell: bash
+        run: |
+          mkdir -p nightly
+          cp "target/${{ matrix.build.TARGET }}/release/soar-dl" nightly/soar-dl-nightly-${{ matrix.build.NAME }}
+          b3sum nightly/soar-dl-nightly-${{ matrix.build.NAME }} > nightly/soar-dl-nightly-${{ matrix.build.NAME }}.b3sum
+
+      - name: Upload nightly binary
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nightly/*
+          tag_name: nightly
+          name: ${{ steps.version.outputs.version }}
+          body: "This is an automated nightly build of soar-dl."
+          prerelease: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
