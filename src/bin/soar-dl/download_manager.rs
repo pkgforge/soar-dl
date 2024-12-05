@@ -27,14 +27,12 @@ impl DownloadManager {
     }
 
     pub async fn execute(&self) {
-        let options = self.create_platform_options();
-
-        let _ = self.handle_github_downloads(&options).await;
-        let _ = self.handle_gitlab_downloads(&options).await;
+        let _ = self.handle_github_downloads().await;
+        let _ = self.handle_gitlab_downloads().await;
         let _ = self.handle_direct_downloads().await;
     }
 
-    fn create_platform_options(&self) -> PlatformDownloadOptions {
+    fn create_platform_options(&self, tag: Option<String>) -> PlatformDownloadOptions {
         let asset_regexes = self
             .args
             .regex_patterns
@@ -52,7 +50,7 @@ impl DownloadManager {
         PlatformDownloadOptions {
             output_path: self.args.output.clone(),
             progress_callback: Some(self.progress_callback.clone()),
-            tag: None,
+            tag,
             regex_patterns: asset_regexes,
             match_keywords: self.args.match_keywords.clone().unwrap_or_default(),
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
@@ -64,24 +62,26 @@ impl DownloadManager {
         &self,
         handler: &ReleaseHandler<P>,
         project: &str,
-        options: &PlatformDownloadOptions,
     ) -> Result<(), PlatformError>
     where
         R: Release<A> + for<'de> Deserialize<'de>,
         A: ReleaseAsset + Clone,
     {
+        let (project, tag) = match project.trim().split_once('@') {
+            Some((proj, tag)) if !tag.trim().is_empty() => (proj, Some(tag.trim())),
+            _ => (project.trim_end_matches('@'), None),
+        };
+
+        let options = self.create_platform_options(tag.map(String::from));
         let releases = handler.fetch_releases::<R>(project).await?;
-        let assets = handler.filter_releases(&releases, options).await?;
+        let assets = handler.filter_releases(&releases, &options).await?;
 
         let selected_asset = self.select_asset(&assets)?;
         handler.download(&selected_asset, options.clone()).await?;
         Ok(())
     }
 
-    async fn handle_github_downloads(
-        &self,
-        options: &PlatformDownloadOptions,
-    ) -> Result<(), PlatformError> {
+    async fn handle_github_downloads(&self) -> Result<(), PlatformError> {
         if self.args.github.is_empty() {
             return Ok(());
         }
@@ -90,9 +90,7 @@ impl DownloadManager {
         for project in &self.args.github {
             println!("Fetching releases from GitHub: {}", project);
             if let Err(e) = self
-                .handle_platform_download::<Github, GithubRelease, GithubAsset>(
-                    &handler, project, options,
-                )
+                .handle_platform_download::<Github, GithubRelease, GithubAsset>(&handler, project)
                 .await
             {
                 eprintln!("{}", e);
@@ -101,10 +99,7 @@ impl DownloadManager {
         Ok(())
     }
 
-    async fn handle_gitlab_downloads(
-        &self,
-        options: &PlatformDownloadOptions,
-    ) -> Result<(), PlatformError> {
+    async fn handle_gitlab_downloads(&self) -> Result<(), PlatformError> {
         if self.args.gitlab.is_empty() {
             return Ok(());
         }
@@ -113,9 +108,7 @@ impl DownloadManager {
         for project in &self.args.gitlab {
             println!("Fetching releases from GitLab: {}", project);
             if let Err(e) = self
-                .handle_platform_download::<Gitlab, GitlabRelease, GitlabAsset>(
-                    &handler, project, options,
-                )
+                .handle_platform_download::<Gitlab, GitlabRelease, GitlabAsset>(&handler, project)
                 .await
             {
                 eprintln!("{}", e);

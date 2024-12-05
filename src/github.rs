@@ -13,17 +13,19 @@ impl ReleasePlatform for Github {
 
     const TOKEN_ENV_VAR: &'static str = "GITHUB_TOKEN";
 
-    fn format_project_path(project: &str) -> Result<(String, String), crate::error::PlatformError> {
+    fn format_project_path(project: &str) -> Result<(String, String), PlatformError> {
         match project.split_once('/') {
-            Some((owner, repo)) => Ok((owner.to_string(), repo.to_string())),
-            None => Err(PlatformError::InvalidInput(format!(
+            Some((owner, repo)) if !owner.trim().is_empty() && !repo.trim().is_empty() => {
+                Ok((owner.to_string(), repo.to_string()))
+            }
+            _ => Err(PlatformError::InvalidInput(format!(
                 "Github project '{}' must be in 'owner/repo' format",
                 project
             ))),
         }
     }
 
-    fn format_api_path(project: &str) -> Result<String, crate::error::PlatformError> {
+    fn format_api_path(project: &str) -> Result<String, PlatformError> {
         let (owner, repo) = Self::format_project_path(project)?;
         Ok(format!("/repos/{}/{}/releases?per_page=100", owner, repo))
     }

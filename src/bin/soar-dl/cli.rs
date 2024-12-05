@@ -25,7 +25,7 @@ pub struct Args {
     #[arg(required = false)]
     pub links: Vec<String>,
 
-    /// Regex to select the asset. Only works for github downloads
+    /// Regex to select the asset.
     #[arg(required = false, short = 'r', long = "regex")]
     pub regex_patterns: Option<Vec<String>>,
 
