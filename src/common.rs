@@ -46,6 +46,7 @@ pub trait ReleaseAsset {
 }
 
 pub trait Release<A: ReleaseAsset> {
+    fn name(&self) -> &str;
     fn tag_name(&self) -> &str;
     fn is_prerelease(&self) -> bool;
     fn published_at(&self) -> &str;

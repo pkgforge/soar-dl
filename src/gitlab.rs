@@ -41,13 +41,18 @@ pub struct GitlabAssets {
 
 #[derive(Debug, Deserialize)]
 pub struct GitlabRelease {
-    pub tag_name: String,
-    pub upcoming_release: bool,
-    pub released_at: String,
-    pub assets: GitlabAssets,
+    name: String,
+    tag_name: String,
+    upcoming_release: bool,
+    released_at: String,
+    assets: GitlabAssets,
 }
 
 impl Release<GitlabAsset> for GitlabRelease {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn tag_name(&self) -> &str {
         &self.tag_name
     }

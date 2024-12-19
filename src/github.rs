@@ -33,13 +33,18 @@ impl ReleasePlatform for Github {
 
 #[derive(Debug, Deserialize)]
 pub struct GithubRelease {
-    pub tag_name: String,
-    pub prerelease: bool,
-    pub published_at: String,
-    pub assets: Vec<GithubAsset>,
+    name: String,
+    tag_name: String,
+    prerelease: bool,
+    published_at: String,
+    assets: Vec<GithubAsset>,
 }
 
 impl Release<GithubAsset> for GithubRelease {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn tag_name(&self) -> &str {
         &self.tag_name
     }
