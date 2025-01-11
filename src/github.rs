@@ -1,8 +1,8 @@
 use serde::Deserialize;
 
 use crate::{
-    common::{Release, ReleaseAsset, ReleasePlatform},
     error::PlatformError,
+    platform::{Release, ReleaseAsset, ReleasePlatform},
 };
 
 pub struct Github;

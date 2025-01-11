@@ -1,15 +1,16 @@
-use std::{env, sync::Arc};
+use std::{
+    env,
+    sync::{Arc, LazyLock},
+};
 
 use regex::Regex;
-use reqwest::{
-    header::{HeaderMap, AUTHORIZATION, USER_AGENT},
-    StatusCode,
-};
+use reqwest::header::{HeaderMap, AUTHORIZATION, USER_AGENT};
 use serde::Deserialize;
 
 use crate::{
     downloader::{DownloadOptions, DownloadState, Downloader},
     error::{DownloadError, PlatformError},
+    utils::should_fallback,
 };
 
 pub enum ApiType {
@@ -17,11 +18,57 @@ pub enum ApiType {
     Primary,
 }
 
-pub fn should_fallback(status: StatusCode) -> bool {
-    status == StatusCode::TOO_MANY_REQUESTS
-        || status == StatusCode::UNAUTHORIZED
-        || status == StatusCode::FORBIDDEN
-        || status.is_server_error()
+#[derive(Debug)]
+pub enum PlatformUrl {
+    Github(String),
+    Gitlab(String),
+    DirectUrl(String),
+}
+
+static GITHUB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?i)(?:https?://)?(?:github(?:\.com)?[:/])([^/@]+/[^/@]+)(?:@([^/\s]*)?)?$")
+        .unwrap()
+});
+static GITLAB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?i)(?:https?://)?(?:gitlab(?:\.com)?[:/])([^/@]+/[^/@]+)(?:@([^/\s]*)?)?$")
+        .unwrap()
+});
+
+impl PlatformUrl {
+    pub fn parse(url: impl Into<String>) -> Result<Self, PlatformError> {
+        let url = url.into();
+        if GITHUB_RELEASE_RE.is_match(&url) {
+            if let Some(caps) = GITHUB_RELEASE_RE.captures(&url) {
+                let project = caps.get(1).unwrap().as_str();
+                let tag = caps
+                    .get(2)
+                    .map(|tag| tag.as_str().trim())
+                    .filter(|&tag| !tag.is_empty());
+                if let Some(tag) = tag {
+                    return Ok(PlatformUrl::Github(format!("{}@{}", project, tag)));
+                } else {
+                    return Ok(PlatformUrl::Github(project.to_string()));
+                }
+            }
+            return Err(PlatformError::InvalidInput(url));
+        }
+        if GITLAB_RELEASE_RE.is_match(&url) {
+            if let Some(caps) = GITLAB_RELEASE_RE.captures(&url) {
+                let project = caps.get(1).unwrap().as_str();
+                let tag = caps
+                    .get(2)
+                    .map(|tag| tag.as_str().trim())
+                    .filter(|&tag| !tag.is_empty());
+                if let Some(tag) = tag {
+                    return Ok(PlatformUrl::Gitlab(format!("{}@{}", project, tag)));
+                } else {
+                    return Ok(PlatformUrl::Gitlab(project.to_string()));
+                }
+            }
+            return Err(PlatformError::InvalidInput(url));
+        }
+        Ok(PlatformUrl::DirectUrl(url))
+    }
 }
 
 pub trait DownloadableAsset {

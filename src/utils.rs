@@ -3,6 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use reqwest::StatusCode;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, BufReader},
@@ -34,4 +35,11 @@ pub async fn is_elf<P: AsRef<Path>>(file_path: P) -> bool {
         return magic_bytes == ELF_MAGIC_BYTES;
     }
     false
+}
+
+pub fn should_fallback(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS
+        || status == StatusCode::UNAUTHORIZED
+        || status == StatusCode::FORBIDDEN
+        || status.is_server_error()
 }

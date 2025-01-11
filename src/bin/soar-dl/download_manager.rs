@@ -4,11 +4,14 @@ use indicatif::HumanBytes;
 use regex::Regex;
 use serde::Deserialize;
 use soar_dl::{
-    common::{PlatformDownloadOptions, Release, ReleaseAsset, ReleaseHandler, ReleasePlatform},
     downloader::{DownloadOptions, DownloadState, Downloader},
     error::{DownloadError, PlatformError},
     github::{Github, GithubAsset, GithubRelease},
     gitlab::{Gitlab, GitlabAsset, GitlabRelease},
+    platform::{
+        PlatformDownloadOptions, PlatformUrl, Release, ReleaseAsset, ReleaseHandler,
+        ReleasePlatform,
+    },
 };
 
 use crate::cli::Args;
@@ -120,17 +123,46 @@ impl DownloadManager {
     async fn handle_direct_downloads(&self) -> Result<(), DownloadError> {
         let downloader = Downloader::default();
         for link in &self.args.links {
-            let options = DownloadOptions {
-                url: link.clone(),
-                output_path: self.args.output.clone(),
-                progress_callback: Some(self.progress_callback.clone()),
-            };
+            match PlatformUrl::parse(link) {
+                Ok(PlatformUrl::DirectUrl(url)) => {
+                    println!("Downloading using direct link: {}", url);
 
-            println!("Downloading using direct link: {}", link);
-            let _ = downloader
-                .download(options)
-                .await
-                .map_err(|e| eprintln!("{}", e));
+                    let options = DownloadOptions {
+                        url: link.clone(),
+                        output_path: self.args.output.clone(),
+                        progress_callback: Some(self.progress_callback.clone()),
+                    };
+                    let _ = downloader
+                        .download(options)
+                        .await
+                        .map_err(|e| eprintln!("{}", e));
+                }
+                Ok(PlatformUrl::Github(project)) => {
+                    println!("Detected GitHub URL, processing as GitHub release");
+                    let handler = ReleaseHandler::<Github>::new();
+                    if let Err(e) = self
+                        .handle_platform_download::<Github, GithubRelease, GithubAsset>(
+                            &handler, &project,
+                        )
+                        .await
+                    {
+                        eprintln!("{}", e);
+                    }
+                }
+                Ok(PlatformUrl::Gitlab(project)) => {
+                    println!("Detected GitLab URL, processing as GitLab release");
+                    let handler = ReleaseHandler::<Gitlab>::new();
+                    if let Err(e) = self
+                        .handle_platform_download::<Gitlab, GitlabRelease, GitlabAsset>(
+                            &handler, &project,
+                        )
+                        .await
+                    {
+                        eprintln!("{}", e);
+                    }
+                }
+                Err(err) => eprintln!("Error parsing URL '{}' : {}", link, err),
+            };
         }
         Ok(())
     }
