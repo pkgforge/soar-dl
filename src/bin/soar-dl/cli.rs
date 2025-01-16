@@ -21,6 +21,10 @@ pub struct Args {
     #[arg(required = false, long)]
     pub gitlab: Vec<String>,
 
+    /// OCI reference
+    #[arg(required = false, long)]
+    pub ghcr: Vec<String>,
+
     /// Links to files
     #[arg(required = false)]
     pub links: Vec<String>,

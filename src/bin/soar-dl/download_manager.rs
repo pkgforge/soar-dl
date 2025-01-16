@@ -31,6 +31,7 @@ impl DownloadManager {
 
     pub async fn execute(&self) {
         let _ = self.handle_github_downloads().await;
+        let _ = self.handle_oci_downloads().await;
         let _ = self.handle_gitlab_downloads().await;
         let _ = self.handle_direct_downloads().await;
     }
@@ -120,6 +121,28 @@ impl DownloadManager {
         Ok(())
     }
 
+    async fn handle_oci_downloads(&self) -> Result<(), PlatformError> {
+        if self.args.ghcr.is_empty() {
+            return Ok(());
+        }
+
+        let downloader = Downloader::default();
+        for reference in &self.args.ghcr {
+            println!("Downloading using OCI reference: {}", reference);
+
+            let options = DownloadOptions {
+                url: reference.clone(),
+                output_path: self.args.output.clone(),
+                progress_callback: Some(self.progress_callback.clone()),
+            };
+            let _ = downloader
+                .download_oci(options)
+                .await
+                .map_err(|e| eprintln!("{}", e));
+        }
+        Ok(())
+    }
+
     async fn handle_direct_downloads(&self) -> Result<(), DownloadError> {
         let downloader = Downloader::default();
         for link in &self.args.links {
@@ -160,6 +183,19 @@ impl DownloadManager {
                     {
                         eprintln!("{}", e);
                     }
+                }
+                Ok(PlatformUrl::Oci(url)) => {
+                    println!("Downloading using OCI reference: {}", url);
+
+                    let options = DownloadOptions {
+                        url: link.clone(),
+                        output_path: self.args.output.clone(),
+                        progress_callback: Some(self.progress_callback.clone()),
+                    };
+                    let _ = downloader
+                        .download_oci(options)
+                        .await
+                        .map_err(|e| eprintln!("{}", e));
                 }
                 Err(err) => eprintln!("Error parsing URL '{}' : {}", link, err),
             };

@@ -1,15 +1,22 @@
-use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path, sync::Arc};
+use std::{
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
-use futures::StreamExt;
+use futures::{future::join_all, StreamExt};
 use reqwest::header::USER_AGENT;
 use tokio::{
     fs::{self, OpenOptions},
     io::AsyncWriteExt,
+    task,
 };
 use url::Url;
 
 use crate::{
     error::DownloadError,
+    oci::{OciClient, Reference},
     utils::{extract_filename, is_elf},
 };
 
@@ -119,5 +126,64 @@ impl Downloader {
         }
 
         Ok(filename)
+    }
+
+    pub async fn download_oci(&self, options: DownloadOptions) -> Result<(), DownloadError> {
+        let url = options.url.clone();
+        let reference: Reference = url.into();
+        let oci_client = OciClient::new(reference);
+
+        let manifest = oci_client.manifest().await.unwrap();
+
+        let mut tasks = Vec::new();
+        let total_bytes: u64 = manifest.layers.iter().map(|layer| layer.size).sum();
+
+        if let Some(ref callback) = options.progress_callback {
+            callback(DownloadState::Progress(DownloadProgress {
+                bytes_downloaded: 0,
+                total_bytes: Some(total_bytes),
+                url: options.url.clone(),
+                file_path: String::new(),
+            }));
+        }
+
+        let downloaded_bytes = Arc::new(Mutex::new(0u64));
+        let outdir = options.output_path;
+
+        for layer in manifest.layers {
+            let client_clone = oci_client.clone();
+            let cb_clone = options.progress_callback.clone();
+            let downloaded_bytes = downloaded_bytes.clone();
+            let url = options.url.clone();
+            let outdir = outdir.clone();
+
+            let task = task::spawn(async move {
+                let chunk_size = client_clone
+                    .pull_layer(&layer, outdir, move |bytes| {
+                        if let Some(ref callback) = cb_clone {
+                            let mut current = downloaded_bytes.lock().unwrap();
+                            *current = bytes;
+                            callback(DownloadState::Progress(DownloadProgress {
+                                bytes_downloaded: *current,
+                                total_bytes: Some(total_bytes),
+                                url: url.clone(),
+                                file_path: String::new(),
+                            }));
+                        }
+                    })
+                    .await?;
+
+                Ok::<u64, DownloadError>(chunk_size)
+            });
+            tasks.push(task);
+        }
+
+        let _ = join_all(tasks).await;
+
+        if let Some(ref callback) = options.progress_callback {
+            callback(DownloadState::Complete);
+        }
+
+        Ok(())
     }
 }

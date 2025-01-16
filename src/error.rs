@@ -14,6 +14,7 @@ pub enum DownloadError {
         url: String,
         status: reqwest::StatusCode,
     },
+    InvalidResponse,
 }
 
 impl Display for DownloadError {
@@ -25,6 +26,7 @@ impl Display for DownloadError {
             DownloadError::ResourceError { url, status } => {
                 write!(f, "Failed to fetch resource from {} [{}]", url, status)
             }
+            DownloadError::InvalidResponse => write!(f, "Failed to parse response"),
         }
     }
 }
@@ -36,6 +38,7 @@ impl Error for DownloadError {
             DownloadError::InvalidUrl { source, .. } => Some(source),
             DownloadError::NetworkError { source } => Some(source),
             DownloadError::ResourceError { .. } => None,
+            DownloadError::InvalidResponse => None,
         }
     }
 }

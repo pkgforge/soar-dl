@@ -22,6 +22,7 @@ pub enum ApiType {
 pub enum PlatformUrl {
     Github(String),
     Gitlab(String),
+    Oci(String),
     DirectUrl(String),
 }
 
@@ -37,6 +38,9 @@ static GITLAB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
 impl PlatformUrl {
     pub fn parse(url: impl Into<String>) -> Result<Self, PlatformError> {
         let url = url.into();
+        if url.starts_with("ghcr.io") {
+            return Ok(PlatformUrl::Oci(url));
+        }
         if GITHUB_RELEASE_RE.is_match(&url) {
             if let Some(caps) = GITHUB_RELEASE_RE.captures(&url) {
                 let project = caps.get(1).unwrap().as_str();
@@ -200,7 +204,7 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
         let release = if let Some(ref tag_name) = options.tag {
             releases
                 .iter()
-                .find(|release| release.tag_name().starts_with(tag_name))
+                .find(|release| release.tag_name() == tag_name)
         } else {
             releases
                 .iter()
