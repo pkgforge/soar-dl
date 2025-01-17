@@ -22,16 +22,9 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum DownloadState {
-    Progress(DownloadProgress),
+    Preparing(u64),
+    Progress(u64),
     Complete,
-}
-
-#[derive(Debug, Clone)]
-pub struct DownloadProgress {
-    pub bytes_downloaded: u64,
-    pub total_bytes: Option<u64>,
-    pub url: String,
-    pub file_path: String,
 }
 
 pub struct DownloadOptions {
@@ -67,7 +60,7 @@ impl Downloader {
             });
         }
 
-        let content_length = response.content_length();
+        let content_length = response.content_length().unwrap_or(0);
 
         let filename = options
             .output_path
@@ -98,20 +91,19 @@ impl Downloader {
             .await?;
 
         let mut downloaded_bytes = 0u64;
-        let mut progress_callback = options.progress_callback;
+        let progress_callback = options.progress_callback;
+
+        if let Some(ref callback) = progress_callback {
+            callback(DownloadState::Preparing(content_length));
+        }
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.unwrap();
             file.write_all(&chunk).await.unwrap();
             downloaded_bytes = downloaded_bytes.saturating_add(chunk.len() as u64);
 
-            if let Some(ref mut callback) = progress_callback {
-                callback(DownloadState::Progress(DownloadProgress {
-                    bytes_downloaded: downloaded_bytes,
-                    total_bytes: content_length,
-                    url: options.url.clone(),
-                    file_path: filename.clone(),
-                }));
+            if let Some(ref callback) = progress_callback {
+                callback(DownloadState::Progress(downloaded_bytes));
             }
         }
 
@@ -121,8 +113,8 @@ impl Downloader {
             fs::set_permissions(&output_path, Permissions::from_mode(0o755)).await?;
         }
 
-        if let Some(ref cb) = progress_callback {
-            cb(DownloadState::Complete);
+        if let Some(ref callback) = progress_callback {
+            callback(DownloadState::Complete);
         }
 
         Ok(filename)
@@ -139,12 +131,7 @@ impl Downloader {
         let total_bytes: u64 = manifest.layers.iter().map(|layer| layer.size).sum();
 
         if let Some(ref callback) = options.progress_callback {
-            callback(DownloadState::Progress(DownloadProgress {
-                bytes_downloaded: 0,
-                total_bytes: Some(total_bytes),
-                url: options.url.clone(),
-                file_path: String::new(),
-            }));
+            callback(DownloadState::Preparing(total_bytes));
         }
 
         let downloaded_bytes = Arc::new(Mutex::new(0u64));
@@ -154,26 +141,20 @@ impl Downloader {
             let client_clone = oci_client.clone();
             let cb_clone = options.progress_callback.clone();
             let downloaded_bytes = downloaded_bytes.clone();
-            let url = options.url.clone();
             let outdir = outdir.clone();
 
             let task = task::spawn(async move {
-                let chunk_size = client_clone
+                client_clone
                     .pull_layer(&layer, outdir, move |bytes| {
                         if let Some(ref callback) = cb_clone {
                             let mut current = downloaded_bytes.lock().unwrap();
                             *current = bytes;
-                            callback(DownloadState::Progress(DownloadProgress {
-                                bytes_downloaded: *current,
-                                total_bytes: Some(total_bytes),
-                                url: url.clone(),
-                                file_path: String::new(),
-                            }));
+                            callback(DownloadState::Progress(*current));
                         }
                     })
                     .await?;
 
-                Ok::<u64, DownloadError>(chunk_size)
+                Ok::<(), DownloadError>(())
             });
             tasks.push(task);
         }

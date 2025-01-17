@@ -142,7 +142,11 @@ impl OciClient {
             });
         }
 
-        let filename = layer.get_title().unwrap();
+        let Some(filename) = layer.get_title() else {
+            // skip if layer doesn't contain title
+            return Ok(0);
+        };
+
         let (temp_path, final_path) = if let Some(output_dir) = output_dir {
             let output_dir = output_dir.as_ref();
             fs::create_dir_all(output_dir).await?;

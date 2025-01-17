@@ -38,11 +38,11 @@ fn calculate_speed(pos: u64, elapsed: f64) -> u64 {
 
 pub fn handle_progress(state: DownloadState, progress_bar: &ProgressBar) {
     match state {
+        DownloadState::Preparing(total_size) => {
+            progress_bar.set_length(total_size);
+        }
         DownloadState::Progress(progress) => {
-            if let Some(total) = progress.total_bytes {
-                progress_bar.set_length(total);
-            }
-            progress_bar.set_position(progress.bytes_downloaded);
+            progress_bar.set_position(progress);
         }
         DownloadState::Complete => progress_bar.finish(),
     }
