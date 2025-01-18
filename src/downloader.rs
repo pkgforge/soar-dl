@@ -157,7 +157,7 @@ impl Downloader {
                         callback(DownloadState::Preparing(total_bytes));
                     }
                     let mut current = downloaded_bytes.lock().unwrap();
-                    *current = bytes;
+                    *current += bytes;
                     callback(DownloadState::Progress(*current));
                 }
             })
@@ -211,7 +211,7 @@ impl Downloader {
                     .pull_layer(&layer, &file_path, move |bytes, _| {
                         if let Some(ref callback) = cb_clone {
                             let mut current = downloaded_bytes.lock().unwrap();
-                            *current = bytes;
+                            *current += bytes;
                             callback(DownloadState::Progress(*current));
                         }
                     })

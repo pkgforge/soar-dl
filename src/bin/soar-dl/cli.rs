@@ -21,7 +21,7 @@ pub struct Args {
     #[arg(required = false, long)]
     pub gitlab: Vec<String>,
 
-    /// OCI reference
+    /// GHCR image or blob
     #[arg(required = false, long)]
     pub ghcr: Vec<String>,
 
