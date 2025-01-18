@@ -1,5 +1,7 @@
 use std::{
     collections::HashMap,
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
@@ -11,7 +13,7 @@ use tokio::{
     io::AsyncWriteExt,
 };
 
-use crate::error::DownloadError;
+use crate::{error::DownloadError, utils::is_elf};
 
 #[derive(Deserialize)]
 pub struct OciLayer {
@@ -41,43 +43,55 @@ pub struct OciManifest {
 #[derive(Clone)]
 pub struct OciClient {
     client: reqwest::Client,
-    reference: Reference,
+    pub reference: Reference,
 }
 
 #[derive(Clone)]
 pub struct Reference {
-    package: String,
-    tag: String,
+    pub package: String,
+    pub tag: String,
 }
 
 impl From<&str> for Reference {
     fn from(value: &str) -> Self {
         let paths = value.trim_start_matches("ghcr.io/");
-        let (package, tag) = paths.split_once(':').unwrap_or((paths, "latest"));
+
+        // <package>@sha256:<digest>
+        if let Some((package, digest)) = paths.split_once("@") {
+            return Self {
+                package: package.to_string(),
+                tag: digest.to_string(),
+            };
+        }
+
+        // <package>:<tag>
+        if let Some((package, tag)) = paths.split_once(':') {
+            return Self {
+                package: package.to_string(),
+                tag: tag.to_string(),
+            };
+        }
 
         Self {
-            package: package.to_string(),
-            tag: tag.to_string(),
+            package: paths.to_string(),
+            tag: "latest".to_string(),
         }
     }
 }
 
 impl From<String> for Reference {
     fn from(value: String) -> Self {
-        let paths = value.trim_start_matches("ghcr.io/");
-        let (package, tag) = paths.split_once(':').unwrap_or((paths, "latest"));
-
-        Self {
-            package: package.to_string(),
-            tag: tag.to_string(),
-        }
+        value.as_str().into()
     }
 }
 
 impl OciClient {
-    pub fn new(reference: Reference) -> Self {
+    pub fn new(reference: &Reference) -> Self {
         let client = reqwest::Client::new();
-        Self { client, reference }
+        Self {
+            client,
+            reference: reference.clone(),
+        }
     }
 
     pub fn headers(&self) -> HeaderMap {
@@ -114,14 +128,15 @@ impl OciClient {
         Ok(manifest)
     }
 
-    pub async fn pull_layer<F, P: AsRef<Path>>(
+    pub async fn pull_layer<F, P>(
         &self,
         layer: &OciLayer,
-        output_dir: Option<P>,
+        output_path: P,
         progress_callback: F,
     ) -> Result<u64, DownloadError>
     where
-        F: Fn(u64) + Send + 'static,
+        P: AsRef<Path>,
+        F: Fn(u64, u64) + Send + 'static,
     {
         let blob_url = format!(
             "https://ghcr.io/v2/{}/blobs/{}",
@@ -142,22 +157,11 @@ impl OciClient {
             });
         }
 
-        let Some(filename) = layer.get_title() else {
-            // skip if layer doesn't contain title
-            return Ok(0);
-        };
+        let content_length = resp.content_length().unwrap_or(0);
+        progress_callback(0, content_length);
 
-        let (temp_path, final_path) = if let Some(output_dir) = output_dir {
-            let output_dir = output_dir.as_ref();
-            fs::create_dir_all(output_dir).await?;
-            let final_path = output_dir.join(format!("{filename}"));
-            let temp_path = output_dir.join(format!("{filename}.part"));
-            (temp_path, final_path)
-        } else {
-            let final_path = PathBuf::from(&filename);
-            let temp_path = PathBuf::from(format!("{filename}.part"));
-            (temp_path, final_path)
-        };
+        let output_path = output_path.as_ref();
+        let temp_path = PathBuf::from(&format!("{}.part", output_path.display()));
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -173,11 +177,15 @@ impl OciClient {
             let chunk_size = chunk.len() as u64;
             file.write_all(&chunk).await.unwrap();
 
-            progress_callback(chunk_size);
+            progress_callback(chunk_size, 0);
             total_bytes_downloaded += chunk_size;
         }
 
-        fs::rename(&temp_path, &final_path).await?;
+        fs::rename(&temp_path, &output_path).await?;
+
+        if is_elf(&output_path).await {
+            fs::set_permissions(&output_path, Permissions::from_mode(0o755)).await?;
+        }
 
         Ok(total_bytes_downloaded)
     }
@@ -188,5 +196,12 @@ impl OciLayer {
         self.annotations
             .get("org.opencontainers.image.title")
             .cloned()
+    }
+
+    pub fn set_title(&mut self, title: &str) {
+        self.annotations.insert(
+            "org.opencontainers.image.title".to_string(),
+            title.to_string(),
+        );
     }
 }

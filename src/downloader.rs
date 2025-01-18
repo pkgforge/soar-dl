@@ -1,7 +1,8 @@
 use std::{
+    collections::HashMap,
     fs::Permissions,
     os::unix::fs::PermissionsExt,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -16,7 +17,7 @@ use url::Url;
 
 use crate::{
     error::DownloadError,
-    oci::{OciClient, Reference},
+    oci::{OciClient, OciLayer, Reference},
     utils::{extract_filename, is_elf},
 };
 
@@ -120,10 +121,63 @@ impl Downloader {
         Ok(filename)
     }
 
+    pub async fn download_blob(
+        &self,
+        client: OciClient,
+        options: DownloadOptions,
+    ) -> Result<(), DownloadError> {
+        let reference = client.reference.clone();
+        let digest = reference.tag;
+        let downloaded_bytes = Arc::new(Mutex::new(0u64));
+        let output_path = options.output_path;
+        let ref_name = reference
+            .package
+            .rsplit_once('/')
+            .map_or(digest.clone(), |(_, name)| name.to_string());
+        let file_path = output_path.unwrap_or_else(|| ref_name.clone());
+        let file_path = if file_path.ends_with('/') {
+            fs::create_dir_all(&file_path).await?;
+            format!("{}/{}", file_path.trim_end_matches('/'), ref_name)
+        } else {
+            file_path
+        };
+
+        let fake_layer = OciLayer {
+            media_type: String::from("application/octet-stream"),
+            digest: digest.clone(),
+            size: 0,
+            annotations: HashMap::new(),
+        };
+
+        let cb_clone = options.progress_callback.clone();
+        client
+            .pull_layer(&fake_layer, &file_path, move |bytes, total_bytes| {
+                if let Some(ref callback) = cb_clone {
+                    if total_bytes > 0 {
+                        callback(DownloadState::Preparing(total_bytes));
+                    }
+                    let mut current = downloaded_bytes.lock().unwrap();
+                    *current = bytes;
+                    callback(DownloadState::Progress(*current));
+                }
+            })
+            .await?;
+
+        if let Some(ref callback) = options.progress_callback {
+            callback(DownloadState::Complete);
+        }
+
+        Ok(())
+    }
+
     pub async fn download_oci(&self, options: DownloadOptions) -> Result<(), DownloadError> {
         let url = options.url.clone();
         let reference: Reference = url.into();
-        let oci_client = OciClient::new(reference);
+        let oci_client = OciClient::new(&reference);
+
+        if reference.tag.starts_with("sha256:") {
+            return self.download_blob(oci_client, options).await;
+        }
 
         let manifest = oci_client.manifest().await.unwrap();
 
@@ -136,16 +190,25 @@ impl Downloader {
 
         let downloaded_bytes = Arc::new(Mutex::new(0u64));
         let outdir = options.output_path;
+        let base_path = if let Some(dir) = outdir {
+            fs::create_dir_all(&dir).await?;
+            PathBuf::from(dir)
+        } else {
+            PathBuf::new()
+        };
 
         for layer in manifest.layers {
             let client_clone = oci_client.clone();
             let cb_clone = options.progress_callback.clone();
             let downloaded_bytes = downloaded_bytes.clone();
-            let outdir = outdir.clone();
+            let Some(filename) = layer.get_title() else {
+                continue;
+            };
+            let file_path = base_path.join(filename);
 
             let task = task::spawn(async move {
                 client_clone
-                    .pull_layer(&layer, outdir, move |bytes| {
+                    .pull_layer(&layer, &file_path, move |bytes, _| {
                         if let Some(ref callback) = cb_clone {
                             let mut current = downloaded_bytes.lock().unwrap();
                             *current = bytes;
