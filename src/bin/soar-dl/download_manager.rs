@@ -4,7 +4,7 @@ use indicatif::HumanBytes;
 use regex::Regex;
 use serde::Deserialize;
 use soar_dl::{
-    downloader::{DownloadOptions, DownloadState, Downloader},
+    downloader::{DownloadOptions, DownloadState, Downloader, OciDownloadOptions},
     error::{DownloadError, PlatformError},
     github::{Github, GithubAsset, GithubRelease},
     gitlab::{Gitlab, GitlabAsset, GitlabRelease},
@@ -81,6 +81,8 @@ impl DownloadManager {
         let assets = handler.filter_releases(&releases, &options).await?;
 
         let selected_asset = self.select_asset(&assets)?;
+
+        println!("Downloading asset from {}", selected_asset.download_url());
         handler.download(&selected_asset, options.clone()).await?;
         Ok(())
     }
@@ -130,10 +132,12 @@ impl DownloadManager {
         for reference in &self.args.ghcr {
             println!("Downloading using OCI reference: {}", reference);
 
-            let options = DownloadOptions {
+            let options = OciDownloadOptions {
                 url: reference.clone(),
+                concurrency: self.args.concurrency.clone(),
                 output_path: self.args.output.clone(),
                 progress_callback: Some(self.progress_callback.clone()),
+                api: self.args.ghcr_api.clone(),
             };
             let _ = downloader
                 .download_oci(options)
@@ -187,10 +191,12 @@ impl DownloadManager {
                 Ok(PlatformUrl::Oci(url)) => {
                     println!("Downloading using OCI reference: {}", url);
 
-                    let options = DownloadOptions {
-                        url: link.clone(),
+                    let options = OciDownloadOptions {
+                        url: url.clone(),
+                        concurrency: self.args.concurrency.clone(),
                         output_path: self.args.output.clone(),
                         progress_callback: Some(self.progress_callback.clone()),
+                        api: self.args.ghcr_api.clone(),
                     };
                     let _ = downloader
                         .download_oci(options)

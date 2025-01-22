@@ -48,4 +48,12 @@ pub struct Args {
     /// Output file path
     #[arg(required = false, short, long)]
     pub output: Option<String>,
+
+    /// GHCR concurrency
+    #[arg(required = false, short, long)]
+    pub concurrency: Option<u64>,
+
+    /// GHCR API to use
+    #[arg(required = false, long)]
+    pub ghcr_api: Option<String>,
 }

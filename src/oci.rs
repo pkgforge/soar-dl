@@ -44,6 +44,7 @@ pub struct OciManifest {
 pub struct OciClient {
     client: reqwest::Client,
     pub reference: Reference,
+    pub api: Option<String>,
 }
 
 #[derive(Clone)]
@@ -86,11 +87,12 @@ impl From<String> for Reference {
 }
 
 impl OciClient {
-    pub fn new(reference: &Reference) -> Self {
+    pub fn new(reference: &Reference, api: Option<String>) -> Self {
         let client = reqwest::Client::new();
         Self {
             client,
             reference: reference.clone(),
+            api,
         }
     }
 
@@ -103,8 +105,13 @@ impl OciClient {
 
     pub async fn manifest(&self) -> Result<OciManifest, DownloadError> {
         let manifest_url = format!(
-            "https://ghcr.io/v2/{}/manifests/{}",
-            self.reference.package, self.reference.tag
+            "{}/{}/manifests/{}",
+            self.api
+                .clone()
+                .unwrap_or("https://ghcr.io/v2".to_string())
+                .trim_end_matches('/'),
+            self.reference.package,
+            self.reference.tag
         );
         let resp = self
             .client
@@ -139,8 +146,13 @@ impl OciClient {
         F: Fn(u64, u64) + Send + 'static,
     {
         let blob_url = format!(
-            "https://ghcr.io/v2/{}/blobs/{}",
-            self.reference.package, layer.digest
+            "{}/{}/blobs/{}",
+            self.api
+                .clone()
+                .unwrap_or("https://ghcr.io/v2".to_string())
+                .trim_end_matches('/'),
+            self.reference.package,
+            layer.digest
         );
         let resp = self
             .client

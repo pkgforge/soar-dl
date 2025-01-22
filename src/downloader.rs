@@ -11,6 +11,7 @@ use reqwest::header::USER_AGENT;
 use tokio::{
     fs::{self, OpenOptions},
     io::AsyncWriteExt,
+    sync::Semaphore,
     task,
 };
 use url::Url;
@@ -37,6 +38,15 @@ pub struct DownloadOptions {
 #[derive(Default)]
 pub struct Downloader {
     client: reqwest::Client,
+}
+
+#[derive(Clone)]
+pub struct OciDownloadOptions {
+    pub url: String,
+    pub concurrency: Option<u64>,
+    pub output_path: Option<String>,
+    pub progress_callback: Option<Arc<dyn Fn(DownloadState) + Send + Sync + 'static>>,
+    pub api: Option<String>,
 }
 
 impl Downloader {
@@ -124,7 +134,7 @@ impl Downloader {
     pub async fn download_blob(
         &self,
         client: OciClient,
-        options: DownloadOptions,
+        options: OciDownloadOptions,
     ) -> Result<(), DownloadError> {
         let reference = client.reference.clone();
         let digest = reference.tag;
@@ -170,10 +180,10 @@ impl Downloader {
         Ok(())
     }
 
-    pub async fn download_oci(&self, options: DownloadOptions) -> Result<(), DownloadError> {
+    pub async fn download_oci(&self, options: OciDownloadOptions) -> Result<(), DownloadError> {
         let url = options.url.clone();
         let reference: Reference = url.into();
-        let oci_client = OciClient::new(&reference);
+        let oci_client = OciClient::new(&reference, options.api.clone());
 
         if reference.tag.starts_with("sha256:") {
             return self.download_blob(oci_client, options).await;
@@ -188,6 +198,7 @@ impl Downloader {
             callback(DownloadState::Preparing(total_bytes));
         }
 
+        let semaphore = Arc::new(Semaphore::new(options.concurrency.unwrap_or(1) as usize));
         let downloaded_bytes = Arc::new(Mutex::new(0u64));
         let outdir = options.output_path;
         let base_path = if let Some(dir) = outdir {
@@ -198,6 +209,7 @@ impl Downloader {
         };
 
         for layer in manifest.layers {
+            let permit = semaphore.clone().acquire_owned().await.unwrap();
             let client_clone = oci_client.clone();
             let cb_clone = options.progress_callback.clone();
             let downloaded_bytes = downloaded_bytes.clone();
@@ -219,6 +231,7 @@ impl Downloader {
 
                 Ok::<(), DownloadError>(())
             });
+            drop(permit);
             tasks.push(task);
         }
 
