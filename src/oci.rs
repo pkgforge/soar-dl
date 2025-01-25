@@ -15,7 +15,7 @@ use tokio::{
 
 use crate::{error::DownloadError, utils::is_elf};
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct OciLayer {
     #[serde(rename = "mediaType")]
     pub media_type: String,
@@ -24,7 +24,7 @@ pub struct OciLayer {
     pub annotations: HashMap<String, String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct OciConfig {
     #[serde(rename = "mediaType")]
     pub media_type: String,
@@ -32,7 +32,7 @@ pub struct OciConfig {
     pub size: u64,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct OciManifest {
     #[serde(rename = "mediaType")]
     pub media_type: String,

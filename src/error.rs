@@ -15,6 +15,7 @@ pub enum DownloadError {
         status: reqwest::StatusCode,
     },
     InvalidResponse,
+    LayersNotFound,
 }
 
 impl Display for DownloadError {
@@ -26,6 +27,7 @@ impl Display for DownloadError {
             DownloadError::ResourceError { url, status } => {
                 write!(f, "Failed to fetch resource from {} [{}]", url, status)
             }
+            DownloadError::LayersNotFound => write!(f, "No downloadable layers found"),
             DownloadError::InvalidResponse => write!(f, "Failed to parse response"),
         }
     }
@@ -38,6 +40,7 @@ impl Error for DownloadError {
             DownloadError::InvalidUrl { source, .. } => Some(source),
             DownloadError::NetworkError { source } => Some(source),
             DownloadError::ResourceError { .. } => None,
+            DownloadError::LayersNotFound => None,
             DownloadError::InvalidResponse => None,
         }
     }

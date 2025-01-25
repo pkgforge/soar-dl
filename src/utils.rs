@@ -3,6 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use regex::Regex;
 use reqwest::StatusCode;
 use tokio::{
     fs::File,
@@ -42,4 +43,42 @@ pub fn should_fallback(status: StatusCode) -> bool {
         || status == StatusCode::UNAUTHORIZED
         || status == StatusCode::FORBIDDEN
         || status.is_server_error()
+}
+
+pub fn matches_pattern(
+    name: &str,
+    regex_patterns: &[Regex],
+    match_keywords: &[String],
+    exclude_keywords: &[String],
+    exact_case: bool,
+) -> bool {
+    regex_patterns.iter().all(|regex| regex.is_match(name))
+        && match_keywords.iter().all(|keyword| {
+            keyword
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .all(|part| {
+                    let (asset_name, part) = if exact_case {
+                        (name.to_string(), part.to_string())
+                    } else {
+                        (name.to_lowercase(), part.to_lowercase())
+                    };
+                    asset_name.contains(&part)
+                })
+        })
+        && exclude_keywords.iter().all(|keyword| {
+            keyword
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .all(|part| {
+                    let (asset_name, part) = if exact_case {
+                        (name.to_string(), part.to_string())
+                    } else {
+                        (name.to_lowercase(), part.to_lowercase())
+                    };
+                    !asset_name.contains(&part)
+                })
+        })
 }

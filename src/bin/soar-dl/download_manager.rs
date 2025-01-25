@@ -36,9 +36,8 @@ impl DownloadManager {
         let _ = self.handle_direct_downloads().await;
     }
 
-    fn create_platform_options(&self, tag: Option<String>) -> PlatformDownloadOptions {
-        let asset_regexes = self
-            .args
+    fn create_regex(&self) -> Vec<Regex> {
+        self.args
             .regex_patterns
             .clone()
             .map(|patterns| {
@@ -49,8 +48,11 @@ impl DownloadManager {
             })
             .transpose()
             .unwrap()
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
 
+    fn create_platform_options(&self, tag: Option<String>) -> PlatformDownloadOptions {
+        let asset_regexes = self.create_regex();
         PlatformDownloadOptions {
             output_path: self.args.output.clone(),
             progress_callback: Some(self.progress_callback.clone()),
@@ -123,26 +125,38 @@ impl DownloadManager {
         Ok(())
     }
 
+    async fn handle_oci_download(&self, reference: &str) -> Result<(), PlatformError> {
+        let downloader = Downloader::default();
+
+        let regex_patterns = self.create_regex();
+        let options = OciDownloadOptions {
+            url: reference.to_string(),
+            concurrency: self.args.concurrency.clone(),
+            output_path: self.args.output.clone(),
+            progress_callback: Some(self.progress_callback.clone()),
+            api: self.args.ghcr_api.clone(),
+            regex_patterns,
+            match_keywords: self.args.match_keywords.clone().unwrap_or_default(),
+            exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
+            exact_case: self.args.exact_case,
+        };
+        let _ = downloader
+            .download_oci(options)
+            .await
+            .map_err(|e| eprintln!("{}", e));
+
+        Ok(())
+    }
+
     async fn handle_oci_downloads(&self) -> Result<(), PlatformError> {
         if self.args.ghcr.is_empty() {
             return Ok(());
         }
 
-        let downloader = Downloader::default();
         for reference in &self.args.ghcr {
             println!("Downloading using OCI reference: {}", reference);
 
-            let options = OciDownloadOptions {
-                url: reference.clone(),
-                concurrency: self.args.concurrency.clone(),
-                output_path: self.args.output.clone(),
-                progress_callback: Some(self.progress_callback.clone()),
-                api: self.args.ghcr_api.clone(),
-            };
-            let _ = downloader
-                .download_oci(options)
-                .await
-                .map_err(|e| eprintln!("{}", e));
+            self.handle_oci_download(reference).await?;
         }
         Ok(())
     }
@@ -190,18 +204,9 @@ impl DownloadManager {
                 }
                 Ok(PlatformUrl::Oci(url)) => {
                     println!("Downloading using OCI reference: {}", url);
-
-                    let options = OciDownloadOptions {
-                        url: url.clone(),
-                        concurrency: self.args.concurrency.clone(),
-                        output_path: self.args.output.clone(),
-                        progress_callback: Some(self.progress_callback.clone()),
-                        api: self.args.ghcr_api.clone(),
+                    if let Err(e) = self.handle_oci_download(&url).await {
+                        eprintln!("{}", e);
                     };
-                    let _ = downloader
-                        .download_oci(options)
-                        .await
-                        .map_err(|e| eprintln!("{}", e));
                 }
                 Err(err) => eprintln!("Error parsing URL '{}' : {}", link, err),
             };

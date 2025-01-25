@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::{
     downloader::{DownloadOptions, DownloadState, Downloader},
     error::{DownloadError, PlatformError},
-    utils::should_fallback,
+    utils::{matches_pattern, should_fallback},
 };
 
 pub enum ApiType {
@@ -223,38 +223,13 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
             .into_iter()
             .filter(|asset| {
                 let name = asset.name();
-                options
-                    .regex_patterns
-                    .iter()
-                    .all(|regex| regex.is_match(name))
-                    && options.match_keywords.iter().all(|keyword| {
-                        keyword
-                            .split(',')
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                            .all(|part| {
-                                let (asset_name, part) = if options.exact_case {
-                                    (name.to_string(), part.to_string())
-                                } else {
-                                    (name.to_lowercase(), part.to_lowercase())
-                                };
-                                asset_name.contains(&part)
-                            })
-                    })
-                    && options.exclude_keywords.iter().all(|keyword| {
-                        keyword
-                            .split(',')
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                            .all(|part| {
-                                let (asset_name, part) = if options.exact_case {
-                                    (name.to_string(), part.to_string())
-                                } else {
-                                    (name.to_lowercase(), part.to_lowercase())
-                                };
-                                !asset_name.contains(&part)
-                            })
-                    })
+                matches_pattern(
+                    name,
+                    options.regex_patterns.as_slice(),
+                    options.match_keywords.as_slice(),
+                    options.exclude_keywords.as_slice(),
+                    options.exact_case,
+                )
             })
             .collect();
 

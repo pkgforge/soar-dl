@@ -56,4 +56,8 @@ pub struct Args {
     /// GHCR API to use
     #[arg(required = false, long)]
     pub ghcr_api: Option<String>,
+
+    /// Whether to use exact case matching for keywords
+    #[arg(required = false, long)]
+    pub exact_case: bool,
 }

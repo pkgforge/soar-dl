@@ -7,6 +7,7 @@ use std::{
 };
 
 use futures::{future::join_all, StreamExt};
+use regex::Regex;
 use reqwest::header::USER_AGENT;
 use tokio::{
     fs::{self, OpenOptions},
@@ -19,7 +20,7 @@ use url::Url;
 use crate::{
     error::DownloadError,
     oci::{OciClient, OciLayer, Reference},
-    utils::{extract_filename, is_elf},
+    utils::{extract_filename, is_elf, matches_pattern},
 };
 
 #[derive(Debug, Clone)]
@@ -47,6 +48,10 @@ pub struct OciDownloadOptions {
     pub output_path: Option<String>,
     pub progress_callback: Option<Arc<dyn Fn(DownloadState) + Send + Sync + 'static>>,
     pub api: Option<String>,
+    pub regex_patterns: Vec<Regex>,
+    pub match_keywords: Vec<String>,
+    pub exclude_keywords: Vec<String>,
+    pub exact_case: bool,
 }
 
 impl Downloader {
@@ -192,7 +197,31 @@ impl Downloader {
         let manifest = oci_client.manifest().await.unwrap();
 
         let mut tasks = Vec::new();
-        let total_bytes: u64 = manifest.layers.iter().map(|layer| layer.size).sum();
+
+        let layers = manifest
+            .layers
+            .iter()
+            .filter(|layer| {
+                let Some(title) = layer.get_title() else {
+                    return false;
+                };
+
+                matches_pattern(
+                    &title,
+                    options.regex_patterns.as_slice(),
+                    options.match_keywords.as_slice(),
+                    options.exclude_keywords.as_slice(),
+                    options.exact_case,
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if layers.is_empty() {
+            return Err(DownloadError::LayersNotFound);
+        }
+
+        let total_bytes: u64 = layers.iter().map(|layer| layer.size).sum();
 
         if let Some(ref callback) = options.progress_callback {
             callback(DownloadState::Preparing(total_bytes));
@@ -208,7 +237,7 @@ impl Downloader {
             PathBuf::new()
         };
 
-        for layer in manifest.layers {
+        for layer in layers {
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let client_clone = oci_client.clone();
             let cb_clone = options.progress_callback.clone();
@@ -216,6 +245,7 @@ impl Downloader {
             let Some(filename) = layer.get_title() else {
                 continue;
             };
+
             let file_path = base_path.join(filename);
 
             let task = task::spawn(async move {
