@@ -33,7 +33,7 @@ impl ReleasePlatform for Github {
 
 #[derive(Debug, Deserialize)]
 pub struct GithubRelease {
-    name: String,
+    name: Option<String>,
     tag_name: String,
     prerelease: bool,
     published_at: String,
@@ -42,7 +42,7 @@ pub struct GithubRelease {
 
 impl Release<GithubAsset> for GithubRelease {
     fn name(&self) -> &str {
-        &self.name
+        self.name.as_deref().unwrap_or("")
     }
 
     fn tag_name(&self) -> &str {

@@ -57,11 +57,14 @@ Options:
       --github <GITHUB>             Github project
       --gitlab <GITLAB>             Gitlab project
       --ghcr <GHCR>                 GHCR image or blob
-  -r, --regex <REGEX_PATTERNS>      Regex to select the asset. Only works for github downloads
+  -r, --regex <REGEX_PATTERNS>      Regex to select the asset
   -m, --match <MATCH_KEYWORDS>      Check if the asset contains given string
   -e, --exclude <EXCLUDE_KEYWORDS>  Check if the asset contains given string
   -y, --yes                         Skip all prompts and use first
   -o, --output <OUTPUT>             Output file path
+  -c, --concurrency <CONCURRENCY>   GHCR concurrency
+      --ghcr-api <GHCR_API>         GHCR API to use
+      --exact-case                  Whether to use exact case matching for keywords
   -h, --help                        Print help
   -V, --version                     Print version
 ```
