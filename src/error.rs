@@ -16,6 +16,7 @@ pub enum DownloadError {
     },
     InvalidResponse,
     LayersNotFound,
+    ChunkError,
 }
 
 impl Display for DownloadError {
@@ -29,6 +30,7 @@ impl Display for DownloadError {
             }
             DownloadError::LayersNotFound => write!(f, "No downloadable layers found"),
             DownloadError::InvalidResponse => write!(f, "Failed to parse response"),
+            DownloadError::ChunkError => write!(f, "Failed to read chunk"),
         }
     }
 }
@@ -42,6 +44,7 @@ impl Error for DownloadError {
             DownloadError::ResourceError { .. } => None,
             DownloadError::LayersNotFound => None,
             DownloadError::InvalidResponse => None,
+            DownloadError::ChunkError => None,
         }
     }
 }

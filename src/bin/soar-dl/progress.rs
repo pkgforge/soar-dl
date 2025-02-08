@@ -45,5 +45,6 @@ pub fn handle_progress(state: DownloadState, progress_bar: &ProgressBar) {
             progress_bar.set_position(progress);
         }
         DownloadState::Complete => progress_bar.finish(),
+        _ => {}
     }
 }

@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread, time::Duration};
 
 use indicatif::HumanBytes;
 use regex::Regex;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use soar_dl::{
-    downloader::{DownloadOptions, DownloadState, Downloader, OciDownloadOptions},
+    downloader::{DownloadOptions, DownloadState, Downloader, OciDownloadOptions, OciDownloader},
     error::{DownloadError, PlatformError},
     github::{Github, GithubAsset, GithubRelease},
     gitlab::{Gitlab, GitlabAsset, GitlabRelease},
@@ -126,8 +127,6 @@ impl DownloadManager {
     }
 
     async fn handle_oci_download(&self, reference: &str) -> Result<(), PlatformError> {
-        let downloader = Downloader::default();
-
         let regex_patterns = self.create_regex();
         let options = OciDownloadOptions {
             url: reference.to_string(),
@@ -140,10 +139,29 @@ impl DownloadManager {
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
             exact_case: self.args.exact_case,
         };
-        let _ = downloader
-            .download_oci(options)
-            .await
-            .map_err(|e| eprintln!("{}", e));
+        let mut downloader = OciDownloader::new(options);
+        let mut retries = 0;
+        loop {
+            if retries > 5 {
+                eprintln!("Max retries exhausted. Aborting.");
+                break;
+            }
+            match downloader.download_oci().await {
+                Ok(_) => break,
+                Err(
+                    DownloadError::ResourceError {
+                        status: StatusCode::TOO_MANY_REQUESTS,
+                        ..
+                    }
+                    | DownloadError::ChunkError,
+                ) => thread::sleep(Duration::from_secs(5)),
+                Err(err) => {
+                    eprintln!("{}", err);
+                    break;
+                }
+            };
+            retries += 1;
+        }
 
         Ok(())
     }

@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use futures::StreamExt;
+use futures::TryStreamExt;
 use reqwest::header::{self, HeaderMap};
 use serde::Deserialize;
 use tokio::{
@@ -45,6 +45,15 @@ pub struct OciClient {
     client: reqwest::Client,
     pub reference: Reference,
     pub api: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct OciDownloadProgress {
+    pub url: String,
+    pub downloaded_layers: Vec<String>,
+    pub total_layers: Vec<String>,
+    pub total_bytes: u64,
+    pub downloaded_bytes: u64,
 }
 
 #[derive(Clone)]
@@ -184,8 +193,11 @@ impl OciClient {
         let mut stream = resp.bytes_stream();
         let mut total_bytes_downloaded = 0;
 
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.unwrap();
+        while let Some(chunk) = stream
+            .try_next()
+            .await
+            .map_err(|_| DownloadError::ChunkError)?
+        {
             let chunk_size = chunk.len() as u64;
             file.write_all(&chunk).await.unwrap();
 

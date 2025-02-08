@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::Permissions,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -19,7 +19,7 @@ use url::Url;
 
 use crate::{
     error::DownloadError,
-    oci::{OciClient, OciLayer, Reference},
+    oci::{OciClient, OciLayer, OciManifest, Reference},
     utils::{extract_filename, is_elf, matches_pattern},
 };
 
@@ -28,6 +28,9 @@ pub enum DownloadState {
     Preparing(u64),
     Progress(u64),
     Complete,
+    Error,
+    Aborted,
+    Recovered,
 }
 
 pub struct DownloadOptions {
@@ -135,16 +138,29 @@ impl Downloader {
 
         Ok(filename)
     }
+}
 
-    pub async fn download_blob(
-        &self,
-        client: OciClient,
-        options: OciDownloadOptions,
-    ) -> Result<(), DownloadError> {
+pub struct OciDownloader {
+    manifest: Option<OciManifest>,
+    options: OciDownloadOptions,
+    completed_layers: Arc<Mutex<HashSet<String>>>,
+}
+
+impl OciDownloader {
+    pub fn new(options: OciDownloadOptions) -> Self {
+        Self {
+            manifest: None,
+            options,
+            completed_layers: Arc::new(Mutex::new(HashSet::new())),
+        }
+    }
+
+    pub async fn download_blob(&self, client: OciClient) -> Result<(), DownloadError> {
+        let options = &self.options;
         let reference = client.reference.clone();
         let digest = reference.tag;
         let downloaded_bytes = Arc::new(Mutex::new(0u64));
-        let output_path = options.output_path;
+        let output_path = options.output_path.clone();
         let ref_name = reference
             .package
             .rsplit_once('/')
@@ -185,16 +201,19 @@ impl Downloader {
         Ok(())
     }
 
-    pub async fn download_oci(&self, options: OciDownloadOptions) -> Result<(), DownloadError> {
+    pub async fn download_oci(&mut self) -> Result<(), DownloadError> {
+        let options = &self.options;
         let url = options.url.clone();
         let reference: Reference = url.into();
         let oci_client = OciClient::new(&reference, options.api.clone());
 
         if reference.tag.starts_with("sha256:") {
-            return self.download_blob(oci_client, options).await;
+            return self.download_blob(oci_client).await;
         }
-
-        let manifest = oci_client.manifest().await.unwrap();
+        let manifest = match self.manifest {
+            Some(ref manifest) => manifest,
+            None => &oci_client.manifest().await?,
+        };
 
         let mut tasks = Vec::new();
 
@@ -229,7 +248,7 @@ impl Downloader {
 
         let semaphore = Arc::new(Semaphore::new(options.concurrency.unwrap_or(1) as usize));
         let downloaded_bytes = Arc::new(Mutex::new(0u64));
-        let outdir = options.output_path;
+        let outdir = options.output_path.clone();
         let base_path = if let Some(dir) = outdir {
             fs::create_dir_all(&dir).await?;
             PathBuf::from(dir)
@@ -238,10 +257,19 @@ impl Downloader {
         };
 
         for layer in layers {
+            if self
+                .completed_layers
+                .lock()
+                .unwrap()
+                .contains(&layer.digest)
+            {
+                continue;
+            }
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let client_clone = oci_client.clone();
             let cb_clone = options.progress_callback.clone();
             let downloaded_bytes = downloaded_bytes.clone();
+            let completed_layers = self.completed_layers.clone();
             let Some(filename) = layer.get_title() else {
                 continue;
             };
@@ -258,6 +286,7 @@ impl Downloader {
                         }
                     })
                     .await?;
+                completed_layers.lock().unwrap().insert(layer.digest);
 
                 Ok::<(), DownloadError>(())
             });
