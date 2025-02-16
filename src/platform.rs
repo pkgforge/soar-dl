@@ -6,6 +6,7 @@ use std::{
 use regex::Regex;
 use reqwest::header::{HeaderMap, AUTHORIZATION, USER_AGENT};
 use serde::Deserialize;
+use url::Url;
 
 use crate::{
     downloader::{DownloadOptions, DownloadState, Downloader},
@@ -71,7 +72,8 @@ impl PlatformUrl {
             }
             return Err(PlatformError::InvalidInput(url));
         }
-        Ok(PlatformUrl::DirectUrl(url))
+        let url = Url::parse(&url).map_err(|_| PlatformError::InvalidInput(url))?;
+        Ok(PlatformUrl::DirectUrl(url.to_string()))
     }
 }
 
