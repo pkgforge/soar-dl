@@ -24,11 +24,14 @@ impl ReleasePlatform for Gitlab {
         }
     }
 
-    fn format_api_path(project: &str) -> Result<String, PlatformError> {
-        if project.chars().all(|c| c.is_numeric()) {
-            Ok(format!("/api/v4/projects/{}/releases", project))
+    fn format_api_path(project: &str, tag: Option<&str>) -> Result<String, PlatformError> {
+        let encoded_path = project.replace('/', "%2F");
+        if let Some(tag) = tag {
+            Ok(format!(
+                "/api/v4/projects/{}/releases/{}",
+                encoded_path, tag
+            ))
         } else {
-            let encoded_path = project.replace('/', "%2F");
             Ok(format!("/api/v4/projects/{}/releases", encoded_path))
         }
     }

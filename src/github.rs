@@ -25,9 +25,16 @@ impl ReleasePlatform for Github {
         }
     }
 
-    fn format_api_path(project: &str) -> Result<String, PlatformError> {
+    fn format_api_path(project: &str, tag: Option<&str>) -> Result<String, PlatformError> {
         let (owner, repo) = Self::format_project_path(project)?;
-        Ok(format!("/repos/{}/{}/releases?per_page=100", owner, repo))
+        if let Some(tag) = tag {
+            Ok(format!(
+                "/repos/{}/{}/releases/tags/{}?per_page=100",
+                owner, repo, tag
+            ))
+        } else {
+            Ok(format!("/repos/{}/{}/releases?per_page=100", owner, repo))
+        }
     }
 }
 

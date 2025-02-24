@@ -6,6 +6,7 @@ use std::{
 use regex::Regex;
 use reqwest::header::{HeaderMap, AUTHORIZATION, USER_AGENT};
 use serde::Deserialize;
+use serde_json::Value;
 use url::Url;
 
 use crate::{
@@ -89,7 +90,7 @@ pub trait ReleasePlatform {
     const TOKEN_ENV_VAR: &'static str;
 
     fn format_project_path(project: &str) -> Result<(String, String), PlatformError>;
-    fn format_api_path(project: &str) -> Result<String, PlatformError>;
+    fn format_api_path(project: &str, tag: Option<&str>) -> Result<String, PlatformError>;
 }
 
 pub trait ReleaseAsset {
@@ -137,13 +138,14 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
         &self,
         api_type: &ApiType,
         project: &str,
+        tag: Option<&str>,
     ) -> Result<reqwest::Response, PlatformError> {
         let base_url = match api_type {
             ApiType::PkgForge => P::API_BASE_PKGFORGE,
             ApiType::Primary => P::API_BASE_PRIMARY,
         };
 
-        let api_path = P::format_api_path(project)?;
+        let api_path = P::format_api_path(project, tag)?;
         let url = format!("{}{}", base_url, api_path);
 
         let mut headers = HeaderMap::new();
@@ -164,15 +166,19 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
             .map_err(|err| DownloadError::NetworkError { source: err })?)
     }
 
-    pub async fn fetch_releases<R>(&self, project: &str) -> Result<Vec<R>, PlatformError>
+    pub async fn fetch_releases<R>(
+        &self,
+        project: &str,
+        tag: Option<&str>,
+    ) -> Result<Vec<R>, PlatformError>
     where
         R: for<'de> Deserialize<'de>,
     {
-        let response = match self.call_api(&ApiType::PkgForge, project).await {
+        let response = match self.call_api(&ApiType::PkgForge, project, tag).await {
             Ok(resp) => {
                 let status = resp.status();
                 if should_fallback(status) {
-                    self.call_api(&ApiType::Primary, project).await?
+                    self.call_api(&ApiType::Primary, project, tag).await?
                 } else {
                     resp
                 }
@@ -188,10 +194,22 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
             .into());
         }
 
-        response
+        let value: Value = response
             .json()
             .await
-            .map_err(|_| PlatformError::InvalidResponse)
+            .map_err(|_| PlatformError::InvalidResponse)?;
+
+        match value {
+            Value::Array(_) => {
+                serde_json::from_value(value).map_err(|_| PlatformError::InvalidResponse)
+            }
+            Value::Object(_) => {
+                let single: R =
+                    serde_json::from_value(value).map_err(|_| PlatformError::InvalidResponse)?;
+                Ok(vec![single])
+            }
+            _ => Err(PlatformError::InvalidResponse),
+        }
     }
 
     pub async fn filter_releases<R, A>(

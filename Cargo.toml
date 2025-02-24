@@ -1,6 +1,6 @@
 [package]
 name = "soar-dl"
-version = "0.3.5"
+version = "0.4.0"
 authors = ["Rabindra Dhakal <contact@qaidvoid.dev>"]
 description = "A fast download manager"
 license = "MIT"
@@ -25,6 +25,7 @@ indicatif = { version = "0.17.9", optional = true }
 regex = { version = "1.11.1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }
 reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tls", "stream", "http2", "blocking", "json"] }
 serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.139"
 tokio = { version = "1.41.1", features = ["macros", "rt-multi-thread"] }
 url = "2.5.4"
 

@@ -80,7 +80,7 @@ impl DownloadManager {
         };
 
         let options = self.create_platform_options(tag.map(String::from));
-        let releases = handler.fetch_releases::<R>(project).await?;
+        let releases = handler.fetch_releases::<R>(project, tag).await?;
         let assets = handler.filter_releases(&releases, &options).await?;
 
         let selected_asset = self.select_asset(&assets)?;
