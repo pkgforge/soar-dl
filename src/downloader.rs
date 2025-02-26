@@ -105,7 +105,7 @@ impl Downloader {
         let mut stream = response.bytes_stream();
         let mut file = OpenOptions::new()
             .create(true)
-            .append(true)
+            .write(true)
             .open(&temp_path)
             .await?;
 

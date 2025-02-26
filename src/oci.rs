@@ -186,7 +186,7 @@ impl OciClient {
 
         let mut file = OpenOptions::new()
             .create(true)
-            .append(true)
+            .write(true)
             .open(&temp_path)
             .await?;
 
