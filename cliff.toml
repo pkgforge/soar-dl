@@ -50,6 +50,7 @@ commit_parsers = [
     { message = "^[a|A]dd", group = "Added" },
     { message = "^[s|S]upport", group = "Added" },
     { message = "^[r|R]emove", group = "Removed" },
+    { message = "^v\\d+\\.\\d+\\.\\d+$", skip = true },
     { message = "^.*: add", group = "Added" },
     { message = "^.*: support", group = "Added" },
     { message = "^.*: remove", group = "Removed" },
@@ -58,7 +59,6 @@ commit_parsers = [
     { message = "^fix", group = "Fixed" },
     { message = "^.*: fix", group = "Fixed" },
     { message = "^.*", group = "Changed" },
-    { message = "v*.*.*", skip = true }
 ]
 # filter out the commits that are not matched by commit parsers
 filter_commits = false
