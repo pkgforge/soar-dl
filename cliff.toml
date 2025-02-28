@@ -58,6 +58,7 @@ commit_parsers = [
     { message = "^fix", group = "Fixed" },
     { message = "^.*: fix", group = "Fixed" },
     { message = "^.*", group = "Changed" },
+    { message = "v*.*.*", skip = true }
 ]
 # filter out the commits that are not matched by commit parsers
 filter_commits = false

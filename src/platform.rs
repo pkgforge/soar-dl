@@ -33,7 +33,7 @@ static GITHUB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap()
 });
 static GITLAB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(?i)(?:https?://)?(?:gitlab(?:\.com)?[:/])([^/@]+/[^/@]+)(?:@([^/\s]*)?)?$")
+    Regex::new(r"^(?i)(?:https?://)?(?:gitlab(?:\.com)?[:/])((?:\d+)|(?:[^/@]+(?:/[^/@]+)*))(?:@([^/\s]*)?)?$")
         .unwrap()
 });
 
@@ -61,6 +61,10 @@ impl PlatformUrl {
         if GITLAB_RELEASE_RE.is_match(&url) {
             if let Some(caps) = GITLAB_RELEASE_RE.captures(&url) {
                 let project = caps.get(1).unwrap().as_str();
+                // if it's API url or contains `/-/` in path, ignore it
+                if project.starts_with("api") || project.contains("/-/") {
+                    return Ok(PlatformUrl::DirectUrl(url.to_string()))
+                }
                 let tag = caps
                     .get(2)
                     .map(|tag| tag.as_str().trim())
