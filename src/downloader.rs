@@ -8,7 +8,7 @@ use std::{
 
 use futures::{future::join_all, StreamExt};
 use regex::Regex;
-use reqwest::header::USER_AGENT;
+use reqwest::header::{CONTENT_DISPOSITION, USER_AGENT};
 use tokio::{
     fs::{self, OpenOptions},
     io::AsyncWriteExt,
@@ -20,7 +20,7 @@ use url::Url;
 use crate::{
     error::DownloadError,
     oci::{OciClient, OciLayer, OciManifest, Reference},
-    utils::{extract_filename, is_elf, matches_pattern},
+    utils::{extract_filename, extract_filename_from_url, is_elf, matches_pattern},
 };
 
 #[derive(Debug, Clone)]
@@ -83,13 +83,25 @@ impl Downloader {
 
         let filename = options
             .output_path
-            .unwrap_or_else(|| extract_filename(&options.url));
+            .or_else(|| {
+                response
+                    .headers()
+                    .get(CONTENT_DISPOSITION)
+                    .and_then(|header| header.to_str().ok())
+                    .and_then(|header| extract_filename(header))
+            })
+            .or_else(|| extract_filename_from_url(&options.url))
+            .ok_or(DownloadError::FileNameNotFound)?;
+
         let filename = if filename.ends_with('/') {
-            format!(
-                "{}/{}",
-                filename.trim_end_matches('/'),
-                extract_filename(&options.url)
-            )
+            let extracted_name = response
+                .headers()
+                .get(CONTENT_DISPOSITION)
+                .and_then(|header| header.to_str().ok())
+                .and_then(|header| extract_filename(header))
+                .or_else(|| extract_filename_from_url(&options.url))
+                .ok_or(DownloadError::FileNameNotFound)?;
+            format!("{}/{}", filename.trim_end_matches('/'), extracted_name)
         } else {
             filename
         };

@@ -1,7 +1,4 @@
-use std::{
-    path::Path,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::path::Path;
 
 use regex::Regex;
 use reqwest::StatusCode;
@@ -9,20 +6,32 @@ use tokio::{
     fs::File,
     io::{AsyncReadExt, BufReader},
 };
+use url::Url;
 
 pub const ELF_MAGIC_BYTES: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
-pub fn extract_filename(url: &str) -> String {
-    Path::new(url)
+pub fn extract_filename_from_url(url: &str) -> Option<String> {
+    let url = Url::parse(url)
+        .map(|u| u.path().to_string())
+        .unwrap_or_else(|_| url.to_string());
+    Path::new(&url)
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| {
-            let dt = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis();
-            dt.to_string()
-        })
+}
+
+pub fn extract_filename(header_value: &str) -> Option<String> {
+    header_value.split(';').find_map(|part| {
+        let part = part.trim();
+        if part.starts_with("filename=") {
+            Some(
+                part.trim_start_matches("filename=")
+                    .trim_matches('"')
+                    .to_string(),
+            )
+        } else {
+            None
+        }
+    })
 }
 
 pub async fn is_elf<P: AsRef<Path>>(file_path: P) -> bool {
