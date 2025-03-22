@@ -63,7 +63,7 @@ impl PlatformUrl {
                 let project = caps.get(1).unwrap().as_str();
                 // if it's API url or contains `/-/` in path, ignore it
                 if project.starts_with("api") || project.contains("/-/") {
-                    return Ok(PlatformUrl::DirectUrl(url.to_string()))
+                    return Ok(PlatformUrl::DirectUrl(url.to_string()));
                 }
                 let tag = caps
                     .get(2)
@@ -120,6 +120,7 @@ pub struct PlatformDownloadOptions {
     pub match_keywords: Vec<String>,
     pub exclude_keywords: Vec<String>,
     pub exact_case: bool,
+    pub extract_archive: bool,
 }
 
 #[derive(Default)]
@@ -281,6 +282,7 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
                 url: asset.download_url().to_string(),
                 output_path: options.output_path,
                 progress_callback: options.progress_callback,
+                extract_archive: options.extract_archive,
             })
             .await?)
     }

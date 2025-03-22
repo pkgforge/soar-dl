@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod downloader;
 pub mod error;
 pub mod github;

@@ -60,4 +60,8 @@ pub struct Args {
     /// Whether to use exact case matching for keywords
     #[arg(required = false, long)]
     pub exact_case: bool,
+
+    /// Extract supported archive automatically
+    #[arg(required = false, long)]
+    pub extract: bool,
 }

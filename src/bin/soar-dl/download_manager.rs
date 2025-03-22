@@ -62,6 +62,7 @@ impl DownloadManager {
             match_keywords: self.args.match_keywords.clone().unwrap_or_default(),
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
             exact_case: false,
+            extract_archive: self.args.extract,
         }
     }
 
@@ -190,6 +191,7 @@ impl DownloadManager {
                         url: link.clone(),
                         output_path: self.args.output.clone(),
                         progress_callback: Some(self.progress_callback.clone()),
+                        extract_archive: self.args.extract,
                     };
                     let _ = downloader
                         .download(options)

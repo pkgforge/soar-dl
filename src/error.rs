@@ -18,6 +18,7 @@ pub enum DownloadError {
     LayersNotFound,
     ChunkError,
     FileNameNotFound,
+    ZipError(zip::result::ZipError),
 }
 
 impl Display for DownloadError {
@@ -38,6 +39,7 @@ impl Display for DownloadError {
                     "Couldn't find filename. Please provide filename explicitly."
                 )
             }
+            DownloadError::ZipError(err) => write!(f, "Zip error: {}", err),
         }
     }
 }

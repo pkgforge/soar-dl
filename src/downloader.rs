@@ -18,6 +18,7 @@ use tokio::{
 use url::Url;
 
 use crate::{
+    archive,
     error::DownloadError,
     oci::{OciClient, OciLayer, OciManifest, Reference},
     utils::{extract_filename, extract_filename_from_url, is_elf, matches_pattern},
@@ -37,6 +38,7 @@ pub struct DownloadOptions {
     pub url: String,
     pub output_path: Option<String>,
     pub progress_callback: Option<Arc<dyn Fn(DownloadState) + Send + Sync + 'static>>,
+    pub extract_archive: bool,
 }
 
 #[derive(Default)]
@@ -146,6 +148,10 @@ impl Downloader {
 
         if let Some(ref callback) = progress_callback {
             callback(DownloadState::Complete);
+        }
+
+        if options.extract_archive {
+            archive::extract_archive(output_path, Path::new(".")).await?;
         }
 
         Ok(filename)
