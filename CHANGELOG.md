@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2025-03-22
+
+### Added
+
+- Add support for archives
+
+### Changed
+
+- Prioritize filename from response header if not provided
+
 ## [0.4.2] - 2025-02-28
 
 ### Changed
@@ -82,6 +92,7 @@
 - Initialize soar-dl
 - Initial commit
 
+[0.5.0]: https://github.com/pkgforge/soar-dl/compare/v0.4.2..v0.5.0
 [0.4.2]: https://github.com/pkgforge/soar-dl/compare/v0.4.0..v0.4.2
 [0.4.0]: https://github.com/pkgforge/soar-dl/compare/v0.3.5..v0.4.0
 [0.3.5]: https://github.com/pkgforge/soar-dl/compare/v0.3.4..v0.3.5
