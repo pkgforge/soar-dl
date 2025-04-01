@@ -1,6 +1,6 @@
 [package]
 name = "soar-dl"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Rabindra Dhakal <contact@qaidvoid.dev>"]
 description = "A fast download manager"
 license = "MIT"
