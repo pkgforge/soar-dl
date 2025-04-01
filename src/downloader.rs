@@ -151,7 +151,8 @@ impl Downloader {
         }
 
         if options.extract_archive {
-            archive::extract_archive(output_path, Path::new(".")).await?;
+            let extract_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
+            archive::extract_archive(output_path, extract_dir).await?;
         }
 
         Ok(filename)
