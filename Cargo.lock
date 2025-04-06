@@ -1461,7 +1461,7 @@ checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
 
 [[package]]
 name = "soar-dl"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "bzip2",
  "clap",
