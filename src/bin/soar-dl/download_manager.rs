@@ -15,7 +15,7 @@ use soar_dl::{
     },
 };
 
-use crate::cli::Args;
+use crate::{cli::Args, error, info};
 
 pub struct DownloadManager {
     args: Args,
@@ -86,7 +86,7 @@ impl DownloadManager {
 
         let selected_asset = self.select_asset(&assets)?;
 
-        println!("Downloading asset from {}", selected_asset.download_url());
+        info!("Downloading asset from {}", selected_asset.download_url());
         handler.download(&selected_asset, options.clone()).await?;
         Ok(())
     }
@@ -98,12 +98,12 @@ impl DownloadManager {
 
         let handler = ReleaseHandler::<Github>::new();
         for project in &self.args.github {
-            println!("Fetching releases from GitHub: {}", project);
+            info!("Fetching releases from GitHub: {}", project);
             if let Err(e) = self
                 .handle_platform_download::<Github, GithubRelease, GithubAsset>(&handler, project)
                 .await
             {
-                eprintln!("{}", e);
+                error!("{}", e);
             }
         }
         Ok(())
@@ -116,12 +116,12 @@ impl DownloadManager {
 
         let handler = ReleaseHandler::<Gitlab>::new();
         for project in &self.args.gitlab {
-            println!("Fetching releases from GitLab: {}", project);
+            info!("Fetching releases from GitLab: {}", project);
             if let Err(e) = self
                 .handle_platform_download::<Gitlab, GitlabRelease, GitlabAsset>(&handler, project)
                 .await
             {
-                eprintln!("{}", e);
+                error!("{}", e);
             }
         }
         Ok(())
@@ -144,7 +144,7 @@ impl DownloadManager {
         let mut retries = 0;
         loop {
             if retries > 5 {
-                eprintln!("Max retries exhausted. Aborting.");
+                error!("Max retries exhausted. Aborting.");
                 break;
             }
             match downloader.download_oci().await {
@@ -157,7 +157,7 @@ impl DownloadManager {
                     | DownloadError::ChunkError,
                 ) => thread::sleep(Duration::from_secs(5)),
                 Err(err) => {
-                    eprintln!("{}", err);
+                    error!("{}", err);
                     break;
                 }
             };
@@ -173,7 +173,7 @@ impl DownloadManager {
         }
 
         for reference in &self.args.ghcr {
-            println!("Downloading using OCI reference: {}", reference);
+            info!("Downloading using OCI reference: {}", reference);
 
             self.handle_oci_download(reference).await?;
         }
@@ -185,7 +185,7 @@ impl DownloadManager {
         for link in &self.args.links {
             match PlatformUrl::parse(link) {
                 Ok(PlatformUrl::DirectUrl(url)) => {
-                    println!("Downloading using direct link: {}", url);
+                    info!("Downloading using direct link: {}", url);
 
                     let options = DownloadOptions {
                         url: link.clone(),
@@ -196,10 +196,10 @@ impl DownloadManager {
                     let _ = downloader
                         .download(options)
                         .await
-                        .map_err(|e| eprintln!("{}", e));
+                        .map_err(|e| error!("{}", e));
                 }
                 Ok(PlatformUrl::Github(project)) => {
-                    println!("Detected GitHub URL, processing as GitHub release");
+                    info!("Detected GitHub URL, processing as GitHub release");
                     let handler = ReleaseHandler::<Github>::new();
                     if let Err(e) = self
                         .handle_platform_download::<Github, GithubRelease, GithubAsset>(
@@ -207,11 +207,11 @@ impl DownloadManager {
                         )
                         .await
                     {
-                        eprintln!("{}", e);
+                        error!("{}", e);
                     }
                 }
                 Ok(PlatformUrl::Gitlab(project)) => {
-                    println!("Detected GitLab URL, processing as GitLab release");
+                    info!("Detected GitLab URL, processing as GitLab release");
                     let handler = ReleaseHandler::<Gitlab>::new();
                     if let Err(e) = self
                         .handle_platform_download::<Gitlab, GitlabRelease, GitlabAsset>(
@@ -219,16 +219,16 @@ impl DownloadManager {
                         )
                         .await
                     {
-                        eprintln!("{}", e);
+                        error!("{}", e);
                     }
                 }
                 Ok(PlatformUrl::Oci(url)) => {
-                    println!("Downloading using OCI reference: {}", url);
+                    info!("Downloading using OCI reference: {}", url);
                     if let Err(e) = self.handle_oci_download(&url).await {
-                        eprintln!("{}", e);
+                        error!("{}", e);
                     };
                 }
-                Err(err) => eprintln!("Error parsing URL '{}' : {}", link, err),
+                Err(err) => error!("Error parsing URL '{}' : {}", link, err),
             };
         }
         Ok(())
@@ -243,13 +243,13 @@ impl DownloadManager {
             return Ok(assets[0].clone());
         }
 
-        println!("\nAvailable assets:");
+        info!("\nAvailable assets:");
         for (i, asset) in assets.iter().enumerate() {
             let size = asset
                 .size()
                 .map(|s| format!(" ({})", HumanBytes(s)))
                 .unwrap_or_default();
-            println!("{}. {}{}", i + 1, asset.name(), size);
+            info!("{}. {}{}", i + 1, asset.name(), size);
         }
 
         loop {
@@ -261,7 +261,7 @@ impl DownloadManager {
 
             match input.trim().parse::<usize>() {
                 Ok(n) if n > 0 && n <= assets.len() => return Ok(assets[n - 1].clone()),
-                _ => println!("Invalid selection, please try again."),
+                _ => error!("Invalid selection, please try again."),
             }
         }
     }

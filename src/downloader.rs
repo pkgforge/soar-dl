@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::Permissions,
+    io::Write,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -82,6 +83,19 @@ impl Downloader {
         }
 
         let content_length = response.content_length().unwrap_or(0);
+
+        if options.output_path.as_deref() == Some("-") {
+            let stdout = std::io::stdout();
+            let mut stdout_lock = stdout.lock();
+            let mut stream = response.bytes_stream();
+
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.unwrap();
+                stdout_lock.write_all(&chunk).unwrap();
+                stdout_lock.flush().unwrap();
+            }
+            return Ok("-".to_string());
+        }
 
         let filename = options
             .output_path

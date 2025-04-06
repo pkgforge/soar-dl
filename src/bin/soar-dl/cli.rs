@@ -64,4 +64,8 @@ pub struct Args {
     /// Extract supported archive automatically
     #[arg(required = false, long)]
     pub extract: bool,
+
+    /// Quiet mode
+    #[arg(required = false, long, short)]
+    pub quiet: bool,
 }

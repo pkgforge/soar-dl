@@ -43,6 +43,13 @@ soar-dl --github "pkgforge/soar" --gitlab "18817634" --output "final/"
 # Don't do this. The last download will replace the existing file
 # Only use file in output path if you're downloading single file.
 soar-dl --github "pkgforge/soar" --gitlab "18817634" --output "final"
+
+# Extract archives automatically (only `tar.gz`, `tar.xz`, `tar.zstd`, `tar.bz2`, and `zip` are supported)
+soar-dl "https://github.com/pkgforge/soar/releases/download/v0.5.14/soar-x86_64-linux.tar.gz" --extract
+
+# Stream response to stdout
+# If you like to pipe the response to other commands, also use quiet mode `-q` to silence other outputs
+soar-dl "https://github.com/pkgforge/soar/releases/download/v0.5.14/soar-x86_64-linux.tar.gz" -O-
 ```
 
 ## Command Line Options
@@ -65,6 +72,8 @@ Options:
   -c, --concurrency <CONCURRENCY>   GHCR concurrency
       --ghcr-api <GHCR_API>         GHCR API to use
       --exact-case                  Whether to use exact case matching for keywords
+      --extract                     Extract supported archive automatically
+  -q, --quiet                       Quiet mode
   -h, --help                        Print help
   -V, --version                     Print version
 ```
