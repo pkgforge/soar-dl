@@ -12,7 +12,7 @@ use url::Url;
 use crate::{
     downloader::{DownloadOptions, DownloadState, Downloader},
     error::{DownloadError, PlatformError},
-    utils::{matches_pattern, should_fallback},
+    utils::{decode_uri, matches_pattern, should_fallback},
 };
 
 pub enum ApiType {
@@ -29,11 +29,13 @@ pub enum PlatformUrl {
 }
 
 static GITHUB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(?i)(?:https?://)?(?:github(?:\.com)?[:/])([^/@]+/[^/@]+)(?:@([^/\s]*)?)?$")
-        .unwrap()
+    Regex::new(
+        r"^(?i)(?:https?://)?(?:github(?:\.com)?[:/])([^/@]+/[^/@]+)(?:@([^/\s]+(?:/[^/\s]*)*)?)?$",
+    )
+    .unwrap()
 });
 static GITLAB_RELEASE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(?i)(?:https?://)?(?:gitlab(?:\.com)?[:/])((?:\d+)|(?:[^/@]+(?:/[^/@]+)*))(?:@([^/\s]*)?)?$")
+    Regex::new(r"^(?i)(?:https?://)?(?:gitlab(?:\.com)?[:/])((?:\d+)|(?:[^/@]+(?:/[^/@]+)*))(?:@([^/\s]+(?:/[^/\s]*)*)?)?$")
         .unwrap()
 });
 
@@ -48,8 +50,9 @@ impl PlatformUrl {
                 let project = caps.get(1).unwrap().as_str();
                 let tag = caps
                     .get(2)
-                    .map(|tag| tag.as_str().trim())
-                    .filter(|&tag| !tag.is_empty());
+                    .map(|tag| tag.as_str().trim_matches(&['\'', '"', ' '][..]))
+                    .filter(|&tag| !tag.is_empty())
+                    .map(decode_uri);
                 if let Some(tag) = tag {
                     return Ok(PlatformUrl::Github(format!("{}@{}", project, tag)));
                 } else {
@@ -67,8 +70,9 @@ impl PlatformUrl {
                 }
                 let tag = caps
                     .get(2)
-                    .map(|tag| tag.as_str().trim())
-                    .filter(|&tag| !tag.is_empty());
+                    .map(|tag| tag.as_str().trim_matches(&['\'', '"', ' '][..]))
+                    .filter(|&tag| !tag.is_empty())
+                    .map(decode_uri);
                 if let Some(tag) = tag {
                     return Ok(PlatformUrl::Gitlab(format!("{}@{}", project, tag)));
                 } else {

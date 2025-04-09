@@ -91,3 +91,23 @@ pub fn matches_pattern(
                 })
         })
 }
+
+pub fn decode_uri(s: impl AsRef<str>) -> String {
+    let re = Regex::new(r"(%[A-Fa-f0-9]{2})+").unwrap();
+
+    re.replace_all(s.as_ref(), |caps: &regex::Captures| {
+        let seq = caps.get(0).map_or("", |m| m.as_str());
+        let mut r = Vec::<u8>::new();
+        let inp: Vec<u8> = seq.bytes().collect();
+        let mut i: usize = 0;
+        while i != inp.len() {
+            r.push(
+                u8::from_str_radix(&String::from_utf8_lossy(&[inp[i + 1], inp[i + 2]]), 16)
+                    .unwrap_or(0),
+            );
+            i += 3;
+        }
+        String::from_utf8_lossy(&r).into_owned()
+    })
+    .into_owned()
+}
