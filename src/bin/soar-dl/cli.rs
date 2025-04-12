@@ -65,6 +65,10 @@ pub struct Args {
     #[arg(required = false, long)]
     pub extract: bool,
 
+    /// Directory where to extract the archive
+    #[arg(required = false, long)]
+    pub extract_dir: Option<String>,
+
     /// Quiet mode
     #[arg(required = false, long, short)]
     pub quiet: bool,

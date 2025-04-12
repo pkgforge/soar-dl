@@ -22,7 +22,9 @@ use crate::{
     archive,
     error::DownloadError,
     oci::{OciClient, OciLayer, OciManifest, Reference},
-    utils::{extract_filename, extract_filename_from_url, is_elf, matches_pattern},
+    utils::{
+        build_absolute_path, extract_filename, extract_filename_from_url, is_elf, matches_pattern,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,7 @@ pub struct DownloadOptions {
     pub output_path: Option<String>,
     pub progress_callback: Option<Arc<dyn Fn(DownloadState) + Send + Sync + 'static>>,
     pub extract_archive: bool,
+    pub extract_dir: Option<String>,
 }
 
 #[derive(Default)]
@@ -165,8 +168,22 @@ impl Downloader {
         }
 
         if options.extract_archive {
-            let extract_dir = output_path.parent().unwrap_or_else(|| Path::new("."));
-            archive::extract_archive(output_path, extract_dir).await?;
+            let extract_dir = match &options.extract_dir {
+                Some(path) => {
+                    let path = Path::new(path);
+                    if !path.is_dir() {
+                        fs::create_dir_all(path).await?;
+                    }
+                    path.to_path_buf()
+                }
+                None => {
+                    let path = build_absolute_path(output_path)?;
+                    path.parent()
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|| PathBuf::from("."))
+                }
+            };
+            archive::extract_archive(output_path, &extract_dir).await?;
         }
 
         Ok(filename)

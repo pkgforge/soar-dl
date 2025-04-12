@@ -125,6 +125,7 @@ pub struct PlatformDownloadOptions {
     pub exclude_keywords: Vec<String>,
     pub exact_case: bool,
     pub extract_archive: bool,
+    pub extract_dir: Option<String>,
 }
 
 #[derive(Default)]
@@ -287,6 +288,7 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
                 output_path: options.output_path,
                 progress_callback: options.progress_callback,
                 extract_archive: options.extract_archive,
+                extract_dir: options.extract_dir,
             })
             .await?)
     }

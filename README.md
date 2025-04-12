@@ -45,11 +45,11 @@ soar-dl --github "pkgforge/soar" --gitlab "18817634" --output "final/"
 soar-dl --github "pkgforge/soar" --gitlab "18817634" --output "final"
 
 # Extract archives automatically (only `tar.gz`, `tar.xz`, `tar.zstd`, `tar.bz2`, and `zip` are supported)
-soar-dl "https://github.com/pkgforge/soar/releases/download/v0.5.14/soar-x86_64-linux.tar.gz" --extract
+soar-dl "https://github.com/pkgforge/soar/releases/download/v0.5.14/soar-x86_64-linux.tar.gz" --extract --extract-dir extracted
 
 # Stream response to stdout
 # If you like to pipe the response to other commands, also use quiet mode `-q` to silence other outputs
-soar-dl "https://github.com/pkgforge/soar/releases/download/v0.5.14/soar-x86_64-linux.tar.gz" -O-
+soar-dl "https://github.com/pkgforge/soar/releases/download/v0.5.14/soar-x86_64-linux.tar.gz" -o-
 ```
 
 ## Command Line Options

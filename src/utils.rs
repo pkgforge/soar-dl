@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 use regex::Regex;
 use reqwest::StatusCode;
@@ -92,6 +95,7 @@ pub fn matches_pattern(
         })
 }
 
+// https://users.rust-lang.org/t/encode-decode-uri/90017/16
 pub fn decode_uri(s: impl AsRef<str>) -> String {
     let re = Regex::new(r"(%[A-Fa-f0-9]{2})+").unwrap();
 
@@ -110,4 +114,13 @@ pub fn decode_uri(s: impl AsRef<str>) -> String {
         String::from_utf8_lossy(&r).into_owned()
     })
     .into_owned()
+}
+
+pub fn build_absolute_path<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
+    let path = path.as_ref();
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(env::current_dir()?.join(path))
+    }
 }

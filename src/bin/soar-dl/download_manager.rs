@@ -63,6 +63,7 @@ impl DownloadManager {
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
             exact_case: false,
             extract_archive: self.args.extract,
+            extract_dir: self.args.extract_dir.clone(),
         }
     }
 
@@ -192,6 +193,7 @@ impl DownloadManager {
                         output_path: self.args.output.clone(),
                         progress_callback: Some(self.progress_callback.clone()),
                         extract_archive: self.args.extract,
+                        extract_dir: self.args.extract_dir.clone(),
                     };
                     let _ = downloader
                         .download(options)
