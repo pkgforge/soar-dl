@@ -57,7 +57,8 @@ pub struct OciDownloadOptions {
     pub output_path: Option<String>,
     pub progress_callback: Option<Arc<dyn Fn(DownloadState) + Send + Sync + 'static>>,
     pub api: Option<String>,
-    pub regex_patterns: Vec<Regex>,
+    pub regexes: Vec<Regex>,
+    pub globs: Vec<String>,
     pub match_keywords: Vec<String>,
     pub exclude_keywords: Vec<String>,
     pub exact_case: bool,
@@ -289,7 +290,8 @@ impl OciDownloader {
 
                 matches_pattern(
                     &title,
-                    options.regex_patterns.as_slice(),
+                    options.regexes.as_slice(),
+                    options.globs.as_slice(),
                     options.match_keywords.as_slice(),
                     options.exclude_keywords.as_slice(),
                     options.exact_case,

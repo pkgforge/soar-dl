@@ -31,7 +31,11 @@ pub struct Args {
 
     /// Regex to select the asset.
     #[arg(required = false, short = 'r', long = "regex")]
-    pub regex_patterns: Option<Vec<String>>,
+    pub regexes: Option<Vec<String>>,
+
+    /// Glob to select the asset.
+    #[arg(required = false, short = 'g', long = "glob")]
+    pub globs: Option<Vec<String>>,
 
     /// Check if the asset contains given string
     #[arg(required = false, short, long = "match")]

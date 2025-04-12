@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use fast_glob::glob_match;
 use regex::Regex;
 use reqwest::StatusCode;
 use tokio::{
@@ -59,12 +60,14 @@ pub fn should_fallback(status: StatusCode) -> bool {
 
 pub fn matches_pattern(
     name: &str,
-    regex_patterns: &[Regex],
+    regexes: &[Regex],
+    globs: &[String],
     match_keywords: &[String],
     exclude_keywords: &[String],
     exact_case: bool,
 ) -> bool {
-    regex_patterns.iter().all(|regex| regex.is_match(name))
+    regexes.iter().all(|regex| regex.is_match(name))
+        && globs.iter().all(|glob| glob_match(glob, name))
         && match_keywords.iter().all(|keyword| {
             keyword
                 .split(',')

@@ -37,9 +37,9 @@ impl DownloadManager {
         let _ = self.handle_direct_downloads().await;
     }
 
-    fn create_regex(&self) -> Vec<Regex> {
+    fn create_regexes(&self) -> Vec<Regex> {
         self.args
-            .regex_patterns
+            .regexes
             .clone()
             .map(|patterns| {
                 patterns
@@ -53,12 +53,13 @@ impl DownloadManager {
     }
 
     fn create_platform_options(&self, tag: Option<String>) -> PlatformDownloadOptions {
-        let asset_regexes = self.create_regex();
+        let regexes = self.create_regexes();
         PlatformDownloadOptions {
             output_path: self.args.output.clone(),
             progress_callback: Some(self.progress_callback.clone()),
             tag,
-            regex_patterns: asset_regexes,
+            regexes,
+            globs: self.args.globs.clone().unwrap_or_default(),
             match_keywords: self.args.match_keywords.clone().unwrap_or_default(),
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
             exact_case: false,
@@ -129,14 +130,15 @@ impl DownloadManager {
     }
 
     async fn handle_oci_download(&self, reference: &str) -> Result<(), PlatformError> {
-        let regex_patterns = self.create_regex();
+        let regexes = self.create_regexes();
         let options = OciDownloadOptions {
             url: reference.to_string(),
             concurrency: self.args.concurrency.clone(),
             output_path: self.args.output.clone(),
             progress_callback: Some(self.progress_callback.clone()),
             api: self.args.ghcr_api.clone(),
-            regex_patterns,
+            regexes,
+            globs: self.args.globs.clone().unwrap_or_default(),
             match_keywords: self.args.match_keywords.clone().unwrap_or_default(),
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
             exact_case: self.args.exact_case,

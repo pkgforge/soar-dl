@@ -21,6 +21,7 @@ binary = ["clap", "indicatif"]
 [dependencies]
 bzip2 = "0.5.2"
 clap = { version = "4.5.35", features = ["cargo", "derive"], optional = true }
+fast-glob = "0.4.5"
 flate2 = "1.1.1"
 futures = "0.3.31"
 indicatif = { version = "0.17.11", optional = true }
