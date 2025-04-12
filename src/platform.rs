@@ -129,17 +129,15 @@ pub struct PlatformDownloadOptions {
 }
 
 #[derive(Default)]
-pub struct ReleaseHandler<P: ReleasePlatform> {
-    downloader: Downloader,
-    client: reqwest::Client,
+pub struct ReleaseHandler<'a, P: ReleasePlatform> {
+    downloader: Downloader<'a>,
     _platform: std::marker::PhantomData<P>,
 }
 
-impl<P: ReleasePlatform> ReleaseHandler<P> {
+impl<P: ReleasePlatform> ReleaseHandler<'_, P> {
     pub fn new() -> Self {
         Self {
             downloader: Downloader::default(),
-            client: reqwest::Client::new(),
             _platform: std::marker::PhantomData,
         }
     }
@@ -168,7 +166,8 @@ impl<P: ReleasePlatform> ReleaseHandler<P> {
         }
 
         Ok(self
-            .client
+            .downloader
+            .client()
             .get(&url)
             .headers(headers)
             .send()

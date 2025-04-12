@@ -21,6 +21,7 @@ use url::Url;
 use crate::{
     archive,
     error::DownloadError,
+    http_client::SHARED_CLIENT,
     oci::{OciClient, OciLayer, OciManifest, Reference},
     utils::{
         build_absolute_path, extract_filename, extract_filename_from_url, is_elf, matches_pattern,
@@ -45,9 +46,8 @@ pub struct DownloadOptions {
     pub extract_dir: Option<String>,
 }
 
-#[derive(Default)]
-pub struct Downloader {
-    client: reqwest::Client,
+pub struct Downloader<'a> {
+    client: &'a reqwest::Client,
 }
 
 #[derive(Clone)]
@@ -63,7 +63,19 @@ pub struct OciDownloadOptions {
     pub exact_case: bool,
 }
 
-impl Downloader {
+impl<'a> Default for Downloader<'a> {
+    fn default() -> Self {
+        Downloader {
+            client: &SHARED_CLIENT,
+        }
+    }
+}
+
+impl Downloader<'_> {
+    pub fn client(&self) -> &reqwest::Client {
+        self.client
+    }
+
     pub async fn download(&self, options: DownloadOptions) -> Result<String, DownloadError> {
         let url = Url::parse(&options.url).map_err(|err| DownloadError::InvalidUrl {
             url: options.url.clone(),

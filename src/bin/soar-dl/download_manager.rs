@@ -69,7 +69,7 @@ impl DownloadManager {
 
     async fn handle_platform_download<P: ReleasePlatform, R, A>(
         &self,
-        handler: &ReleaseHandler<P>,
+        handler: &ReleaseHandler<'_, P>,
         project: &str,
     ) -> Result<(), PlatformError>
     where
