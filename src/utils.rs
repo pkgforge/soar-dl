@@ -127,3 +127,20 @@ pub fn build_absolute_path<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> 
         Ok(env::current_dir()?.join(path))
     }
 }
+
+#[derive(Clone)]
+pub enum FileMode {
+    SkipExisting,
+    ForceOverwrite,
+    PromptOverwrite,
+}
+
+pub fn get_file_mode(skip_existing: bool, force_overwrite: bool) -> FileMode {
+    if force_overwrite {
+        FileMode::ForceOverwrite
+    } else if skip_existing {
+        FileMode::SkipExisting
+    } else {
+        FileMode::PromptOverwrite
+    }
+}

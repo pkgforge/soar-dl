@@ -88,4 +88,12 @@ pub struct Args {
     /// Set user agent
     #[arg(required = false, long, short = 'A')]
     pub user_agent: Option<String>,
+
+    /// Skip existing download with same file
+    #[arg(required = false, long)]
+    pub skip_existing: bool,
+
+    /// Overwrite existing download with same file
+    #[arg(required = false, long)]
+    pub force_overwrite: bool,
 }

@@ -19,6 +19,7 @@ panic = "abort"
 binary = ["clap", "indicatif"]
 
 [dependencies]
+blake3 = "1.8.2"
 bzip2 = "0.5.2"
 clap = { version = "4.5.35", features = ["cargo", "derive"], optional = true }
 fast-glob = "0.4.5"

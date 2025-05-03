@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread, time::Duration};
+use std::{io::Write, sync::Arc, thread, time::Duration};
 
 use indicatif::HumanBytes;
 use regex::Regex;
@@ -13,6 +13,7 @@ use soar_dl::{
         PlatformDownloadOptions, PlatformUrl, Release, ReleaseAsset, ReleaseHandler,
         ReleasePlatform,
     },
+    utils::get_file_mode,
 };
 
 use crate::{cli::Args, error, info};
@@ -65,6 +66,8 @@ impl DownloadManager {
             exact_case: false,
             extract_archive: self.args.extract,
             extract_dir: self.args.extract_dir.clone(),
+            file_mode: get_file_mode(self.args.skip_existing, self.args.force_overwrite),
+            prompt: Arc::new(prompt_confirm),
         }
     }
 
@@ -142,6 +145,7 @@ impl DownloadManager {
             match_keywords: self.args.match_keywords.clone().unwrap_or_default(),
             exclude_keywords: self.args.exclude_keywords.clone().unwrap_or_default(),
             exact_case: self.args.exact_case,
+            file_mode: get_file_mode(self.args.skip_existing, self.args.force_overwrite),
         };
         let mut downloader = OciDownloader::new(options);
         let mut retries = 0;
@@ -196,6 +200,11 @@ impl DownloadManager {
                         progress_callback: Some(self.progress_callback.clone()),
                         extract_archive: self.args.extract,
                         extract_dir: self.args.extract_dir.clone(),
+                        file_mode: get_file_mode(
+                            self.args.skip_existing,
+                            self.args.force_overwrite,
+                        ),
+                        prompt: Arc::new(prompt_confirm),
                     };
                     let _ = downloader
                         .download(options)
@@ -269,4 +278,12 @@ impl DownloadManager {
             }
         }
     }
+}
+
+fn prompt_confirm(file_name: &str) -> Result<bool, DownloadError> {
+    print!("Overwrite {}? [y/N] ", file_name);
+    std::io::stdout().flush()?;
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
 }

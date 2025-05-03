@@ -9,7 +9,9 @@ use std::{
 
 use futures::{future::join_all, StreamExt};
 use regex::Regex;
-use reqwest::header::{CONTENT_DISPOSITION, USER_AGENT};
+use reqwest::header::{CONTENT_DISPOSITION, CONTENT_RANGE, ETAG, IF_RANGE, LAST_MODIFIED, RANGE};
+use serde::{Deserialize, Serialize};
+
 use tokio::{
     fs::{self, OpenOptions},
     io::AsyncWriteExt,
@@ -25,6 +27,7 @@ use crate::{
     oci::{OciClient, OciLayer, OciManifest, Reference},
     utils::{
         build_absolute_path, extract_filename, extract_filename_from_url, is_elf, matches_pattern,
+        FileMode,
     },
 };
 
@@ -38,12 +41,20 @@ pub enum DownloadState {
     Recovered,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct Meta {
+    etag: Option<String>,
+    last_modified: Option<String>,
+}
+
 pub struct DownloadOptions {
     pub url: String,
     pub output_path: Option<String>,
     pub progress_callback: Option<Arc<dyn Fn(DownloadState) + Send + Sync + 'static>>,
     pub extract_archive: bool,
     pub extract_dir: Option<String>,
+    pub file_mode: FileMode,
+    pub prompt: Arc<dyn Fn(&str) -> Result<bool, DownloadError> + Send + Sync + 'static>,
 }
 
 pub struct Downloader<'a> {
@@ -62,6 +73,7 @@ pub struct OciDownloadOptions {
     pub match_keywords: Vec<String>,
     pub exclude_keywords: Vec<String>,
     pub exact_case: bool,
+    pub file_mode: FileMode,
 }
 
 impl<'a> Default for Downloader<'a> {
@@ -83,123 +95,241 @@ impl Downloader<'_> {
             source: err,
         })?;
 
-        let response = self
-            .client
-            .get(url)
-            .header(USER_AGENT, "pkgforge/soar")
-            .send()
-            .await
-            .map_err(|err| DownloadError::NetworkError { source: err })?;
-
-        if !response.status().is_success() {
-            return Err(DownloadError::ResourceError {
-                status: response.status(),
-                url: options.url,
-            });
-        }
-
-        let content_length = response.content_length().unwrap_or(0);
-
-        if options.output_path.as_deref() == Some("-") {
-            let stdout = std::io::stdout();
-            let mut stdout_lock = stdout.lock();
-            let mut stream = response.bytes_stream();
-
-            while let Some(chunk) = stream.next().await {
-                let chunk = chunk.unwrap();
-                stdout_lock.write_all(&chunk).unwrap();
-                stdout_lock.flush().unwrap();
-            }
-            return Ok("-".to_string());
-        }
-
-        let filename = options
-            .output_path
-            .or_else(|| {
-                response
-                    .headers()
-                    .get(CONTENT_DISPOSITION)
-                    .and_then(|header| header.to_str().ok())
-                    .and_then(|header| extract_filename(header))
-            })
-            .or_else(|| extract_filename_from_url(&options.url))
-            .ok_or(DownloadError::FileNameNotFound)?;
-
-        let filename = if filename.ends_with('/') {
-            let extracted_name = response
-                .headers()
-                .get(CONTENT_DISPOSITION)
-                .and_then(|header| header.to_str().ok())
-                .and_then(|header| extract_filename(header))
-                .or_else(|| extract_filename_from_url(&options.url))
-                .ok_or(DownloadError::FileNameNotFound)?;
-            format!("{}/{}", filename.trim_end_matches('/'), extracted_name)
-        } else {
-            filename
+        let hash_fallback = || {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&options.url.as_bytes());
+            let result = hasher.finalize();
+            result.to_hex().to_string()
         };
 
-        let output_path = Path::new(&filename);
-        if let Some(output_dir) = output_path.parent() {
+        let (mut provisional_path, final_dir) = if let Some(ref out) = options.output_path {
+            if out.ends_with('/') {
+                let dir = PathBuf::from(out);
+                let base =
+                    extract_filename_from_url(&options.url).unwrap_or_else(|| hash_fallback());
+                (dir.join(&base), Some(dir))
+            } else {
+                let p = PathBuf::from(out);
+                if p.is_dir() {
+                    let base =
+                        extract_filename_from_url(&options.url).unwrap_or_else(|| hash_fallback());
+                    (p.join(&base), Some(p))
+                } else {
+                    (p, None)
+                }
+            }
+        } else {
+            let base = extract_filename_from_url(&options.url).unwrap_or_else(|| hash_fallback());
+            (PathBuf::from(&base), None)
+        };
+
+        if let Some(output_dir) = provisional_path.parent() {
             if !output_dir.exists() {
                 fs::create_dir_all(output_dir).await?;
             }
         }
 
-        let temp_path = format!("{}.part", output_path.display());
-        let mut stream = response.bytes_stream();
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&temp_path)
-            .await?;
+        let part_path = provisional_path.with_extension("part");
+        let meta_path = provisional_path.with_extension("part.meta");
 
-        let mut downloaded_bytes = 0u64;
-        let progress_callback = options.progress_callback;
+        let (mut etag, mut last_modified) = if fs::try_exists(&meta_path).await? {
+            let data = fs::read_to_string(&meta_path).await?;
+            let meta: Meta = serde_json::from_str(&data).unwrap();
+            (meta.etag, meta.last_modified)
+        } else {
+            (None, None)
+        };
 
-        if let Some(ref callback) = progress_callback {
-            callback(DownloadState::Preparing(content_length));
-        }
+        let mut attempt = 0;
+        loop {
+            let mut downloaded = if fs::try_exists(&part_path).await? {
+                fs::metadata(&part_path).await?.len()
+            } else {
+                0
+            };
 
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.unwrap();
-            file.write_all(&chunk).await.unwrap();
-            downloaded_bytes = downloaded_bytes.saturating_add(chunk.len() as u64);
+            let mut request = self.client.get(url.clone());
+            request = request.header(RANGE, format!("bytes={}-", downloaded));
+            if let Some(ref etag) = etag {
+                request = request.header(IF_RANGE, etag);
+            }
+            if let Some(ref last_modified) = last_modified {
+                request = request.header(IF_RANGE, last_modified);
+            }
+            let response = request
+                .send()
+                .await
+                .map_err(|err| DownloadError::NetworkError { source: err })?;
+
+            let status = response.status();
+
+            let remote_etag = response
+                .headers()
+                .get(ETAG)
+                .and_then(|h| h.to_str().ok())
+                .map(String::from);
+            let remote_modified = response
+                .headers()
+                .get(LAST_MODIFIED)
+                .and_then(|h| h.to_str().ok())
+                .map(String::from);
+            let changed = (etag.is_some() && remote_etag.is_some() && etag != remote_etag)
+                || (last_modified.is_some()
+                    && last_modified.is_some()
+                    && last_modified != remote_modified);
+
+            // If Range not satisfiable or resource changed, clear and retry once
+            if (status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE || changed) && attempt == 0 {
+                fs::remove_file(&part_path).await.ok();
+                fs::remove_file(&meta_path).await.ok();
+                etag = remote_etag.clone();
+                last_modified = remote_modified.clone();
+                attempt += 1;
+                continue;
+            }
+
+            if !status.is_success() {
+                return Err(DownloadError::ResourceError {
+                    status,
+                    url: options.url,
+                });
+            }
+
+            if options.output_path.as_deref() == Some("-") {
+                let stdout = std::io::stdout();
+                let mut stdout_lock = stdout.lock();
+                let mut stream = response.bytes_stream();
+
+                while let Some(chunk) = stream.next().await {
+                    let chunk = chunk.unwrap();
+                    stdout_lock.write_all(&chunk).unwrap();
+                    stdout_lock.flush().unwrap();
+                }
+                return Ok("-".to_string());
+            }
+
+            let header_name = response
+                .headers()
+                .get(CONTENT_DISPOSITION)
+                .and_then(|header| header.to_str().ok())
+                .and_then(|header| extract_filename(header));
+
+            if let Some(name) = header_name {
+                provisional_path = if let Some(ref dir) = final_dir {
+                    dir.join(name.clone())
+                } else {
+                    PathBuf::from(name.clone())
+                };
+            }
+            let final_target = provisional_path.clone();
+
+            if final_target.exists() && !part_path.exists() {
+                match options.file_mode {
+                    FileMode::SkipExisting => return Ok(final_target.to_string_lossy().into()),
+                    FileMode::ForceOverwrite => {
+                        fs::remove_file(&final_target).await.ok();
+                    }
+                    FileMode::PromptOverwrite => {
+                        let target = final_target.to_string_lossy().to_string();
+                        if !(options.prompt)(&target)? {
+                            return Ok(target);
+                        }
+                    }
+                }
+            }
+
+            let total_size = response
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|h| h.to_str().ok())
+                .and_then(|range| range.rsplit_once('/').and_then(|(_, tot)| tot.parse().ok()))
+                .or_else(|| response.content_length())
+                .unwrap_or(0);
+
+            let should_truncate = response
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|h| h.to_str().ok())
+                .and_then(|r| r.split_whitespace().nth(1))
+                .and_then(|range| range.split('/').next())
+                .and_then(|se| se.split('-').next())
+                .and_then(|s| s.parse::<u64>().ok())
+                .map_or(false, |start| start != downloaded)
+                || status == reqwest::StatusCode::OK;
+
+            let mut stream = response.bytes_stream();
+
+            let mut file = if should_truncate {
+                fs::remove_file(&part_path).await.ok();
+                OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&part_path)
+                    .await?
+            } else {
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&part_path)
+                    .await?
+            };
+
+            let progress_callback = options.progress_callback;
 
             if let Some(ref callback) = progress_callback {
-                callback(DownloadState::Progress(downloaded_bytes));
+                callback(DownloadState::Preparing(total_size));
             }
-        }
 
-        fs::rename(&temp_path, &output_path).await?;
-
-        if is_elf(output_path).await {
-            fs::set_permissions(&output_path, Permissions::from_mode(0o755)).await?;
-        }
-
-        if let Some(ref callback) = progress_callback {
-            callback(DownloadState::Complete);
-        }
-
-        if options.extract_archive {
-            let extract_dir = match &options.extract_dir {
-                Some(path) => {
-                    let path = Path::new(path);
-                    if !path.is_dir() {
-                        fs::create_dir_all(path).await?;
-                    }
-                    path.to_path_buf()
-                }
-                None => {
-                    let path = build_absolute_path(output_path)?;
-                    path.parent()
-                        .map(|p| p.to_path_buf())
-                        .unwrap_or_else(|| PathBuf::from("."))
-                }
+            let meta = Meta {
+                etag: remote_etag.clone(),
+                last_modified: remote_modified.clone(),
             };
-            archive::extract_archive(output_path, &extract_dir).await?;
-        }
+            fs::write(&meta_path, serde_json::to_string(&meta).unwrap()).await?;
 
-        Ok(filename)
+            while let Some(chunk) = stream.next().await {
+                let bytes = chunk.map_err(|err| DownloadError::NetworkError { source: err })?;
+                file.write_all(&bytes).await?;
+                downloaded = downloaded.saturating_add(bytes.len() as u64);
+
+                if let Some(ref callback) = progress_callback {
+                    callback(DownloadState::Progress(downloaded));
+                }
+
+                downloaded += bytes.len() as u64;
+            }
+
+            fs::rename(&part_path, &final_target).await?;
+            fs::remove_file(&meta_path).await.ok();
+
+            if is_elf(&final_target).await {
+                fs::set_permissions(&final_target, Permissions::from_mode(0o755)).await?;
+            }
+
+            if let Some(ref callback) = progress_callback {
+                callback(DownloadState::Complete);
+            }
+
+            if options.extract_archive {
+                let extract_dir = match &options.extract_dir {
+                    Some(path) => {
+                        let path = Path::new(path);
+                        if !path.is_dir() {
+                            fs::create_dir_all(path).await?;
+                        }
+                        path.to_path_buf()
+                    }
+                    None => {
+                        let path = build_absolute_path(&final_target)?;
+                        path.parent()
+                            .map(|p| p.to_path_buf())
+                            .unwrap_or_else(|| PathBuf::from("."))
+                    }
+                };
+                archive::extract_archive(&final_target, &extract_dir).await?;
+            }
+            return Ok(final_target.to_string_lossy().into());
+        }
     }
 }
 

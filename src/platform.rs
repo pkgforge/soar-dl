@@ -4,7 +4,7 @@ use std::{
 };
 
 use regex::Regex;
-use reqwest::header::{HeaderMap, AUTHORIZATION, USER_AGENT};
+use reqwest::header::{HeaderMap, AUTHORIZATION};
 use serde::Deserialize;
 use serde_json::Value;
 use url::Url;
@@ -12,7 +12,7 @@ use url::Url;
 use crate::{
     downloader::{DownloadOptions, DownloadState, Downloader},
     error::{DownloadError, PlatformError},
-    utils::{decode_uri, matches_pattern, should_fallback},
+    utils::{decode_uri, matches_pattern, should_fallback, FileMode},
 };
 
 pub enum ApiType {
@@ -127,6 +127,8 @@ pub struct PlatformDownloadOptions {
     pub exact_case: bool,
     pub extract_archive: bool,
     pub extract_dir: Option<String>,
+    pub file_mode: FileMode,
+    pub prompt: Arc<dyn Fn(&str) -> Result<bool, DownloadError> + Send + Sync + 'static>,
 }
 
 #[derive(Default)]
@@ -158,7 +160,6 @@ impl<P: ReleasePlatform> ReleaseHandler<'_, P> {
         let url = format!("{}{}", base_url, api_path);
 
         let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, "pkgforge/soar".parse().unwrap());
 
         if matches!(api_type, ApiType::Primary) {
             if let Ok(token) = env::var(P::TOKEN_ENV_VAR) {
@@ -290,6 +291,8 @@ impl<P: ReleasePlatform> ReleaseHandler<'_, P> {
                 progress_callback: options.progress_callback,
                 extract_archive: options.extract_archive,
                 extract_dir: options.extract_dir,
+                file_mode: options.file_mode,
+                prompt: options.prompt,
             })
             .await?)
     }
