@@ -76,4 +76,16 @@ pub struct Args {
     /// Quiet mode
     #[arg(required = false, long, short)]
     pub quiet: bool,
+
+    /// Set proxy
+    #[arg(required = false, long)]
+    pub proxy: Option<String>,
+
+    /// Set request headers
+    #[arg(required = false, long, short = 'H')]
+    pub header: Option<Vec<String>>,
+
+    /// Set user agent
+    #[arg(required = false, long, short = 'A')]
+    pub user_agent: Option<String>,
 }
