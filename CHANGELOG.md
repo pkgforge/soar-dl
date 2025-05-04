@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2025-05-04
+
+### Added
+
+- Add resumability and overwrite prompting
+- Add glob support
+
+### Changed
+
+- Allow specifying http headers, proxy and user agent
+- Use shared http client
+- Allow specifying extract directory; fix extract when output is not specified
+- Handle encoded tags, allow / and trim quotes in tags
+
 ## [0.5.3] - 2025-04-06
 
 ### Added
@@ -115,6 +129,7 @@
 - Initialize soar-dl
 - Initial commit
 
+[0.6.0]: https://github.com/pkgforge/soar-dl/compare/v0.5.3..v0.6.0
 [0.5.3]: https://github.com/pkgforge/soar-dl/compare/v0.5.2..v0.5.3
 [0.5.2]: https://github.com/pkgforge/soar-dl/compare/v0.5.1..v0.5.2
 [0.5.1]: https://github.com/pkgforge/soar-dl/compare/v0.5.0..v0.5.1
