@@ -59,6 +59,7 @@ impl PlatformUrl {
                     return Ok(PlatformUrl::Github(project.to_string()));
                 }
             }
+
             return Err(PlatformError::InvalidInput(url));
         }
         if GITLAB_RELEASE_RE.is_match(&url) {
@@ -81,8 +82,13 @@ impl PlatformUrl {
             }
             return Err(PlatformError::InvalidInput(url));
         }
-        let url = Url::parse(&url).map_err(|_| PlatformError::InvalidInput(url))?;
-        Ok(PlatformUrl::DirectUrl(url.to_string()))
+
+        match Url::parse(&url) {
+            Ok(parsed) if !parsed.scheme().is_empty() && parsed.host().is_some() => {
+                Ok(PlatformUrl::DirectUrl(parsed.to_string()))
+            }
+            _ => Err(PlatformError::InvalidInput(url)),
+        }
     }
 }
 

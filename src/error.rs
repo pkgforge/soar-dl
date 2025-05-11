@@ -78,7 +78,7 @@ impl Display for PlatformError {
             PlatformError::ApiError { status } => write!(f, "API error [{}]", status),
             PlatformError::DownloadError(err) => write!(f, "Download error: {}", err),
             PlatformError::InvalidInput(msg) => {
-                write!(f, "{} is invalid. Should be in format (owner/repo)", msg)
+                write!(f, "{} is invalid", msg)
             }
             PlatformError::InvalidResponse => write!(f, "Failed to parse response"),
             PlatformError::NoRelease { tag } => write!(
