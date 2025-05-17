@@ -7,10 +7,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use futures::{future::join_all, StreamExt};
+use futures::{future::join_all, StreamExt, TryStreamExt};
 use regex::Regex;
-use reqwest::header::{CONTENT_DISPOSITION, CONTENT_RANGE, ETAG, IF_RANGE, LAST_MODIFIED, RANGE};
-use serde::{Deserialize, Serialize};
+use reqwest::header::{HeaderMap, CONTENT_DISPOSITION, ETAG, LAST_MODIFIED};
 
 use tokio::{
     fs::{self, OpenOptions},
@@ -25,6 +24,7 @@ use crate::{
     error::DownloadError,
     http_client::SHARED_CLIENT,
     oci::{OciClient, OciLayer, OciManifest, Reference},
+    resume::ResumeSupport,
     utils::{
         build_absolute_path, default_prompt_confirm, extract_filename, extract_filename_from_url,
         is_elf, matches_pattern, FileMode,
@@ -39,12 +39,6 @@ pub enum DownloadState {
     Error,
     Aborted,
     Recovered,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct Meta {
-    etag: Option<String>,
-    last_modified: Option<String>,
 }
 
 pub struct DownloadOptions {
@@ -97,7 +91,7 @@ impl Downloader<'_> {
 
         let hash_fallback = || {
             let mut hasher = blake3::Hasher::new();
-            hasher.update(&options.url.as_bytes());
+            hasher.update(options.url.as_bytes());
             let result = hasher.finalize();
             result.to_hex().to_string()
         };
@@ -105,21 +99,20 @@ impl Downloader<'_> {
         let (mut provisional_path, final_dir) = if let Some(ref out) = options.output_path {
             if out.ends_with('/') {
                 let dir = PathBuf::from(out);
-                let base =
-                    extract_filename_from_url(&options.url).unwrap_or_else(|| hash_fallback());
+                let base = extract_filename_from_url(&options.url).unwrap_or_else(hash_fallback);
                 (dir.join(&base), Some(dir))
             } else {
                 let p = PathBuf::from(out);
                 if p.is_dir() {
                     let base =
-                        extract_filename_from_url(&options.url).unwrap_or_else(|| hash_fallback());
+                        extract_filename_from_url(&options.url).unwrap_or_else(hash_fallback);
                     (p.join(&base), Some(p))
                 } else {
                     (p, None)
                 }
             }
         } else {
-            let base = extract_filename_from_url(&options.url).unwrap_or_else(|| hash_fallback());
+            let base = extract_filename_from_url(&options.url).unwrap_or_else(hash_fallback);
             (PathBuf::from(&base), None)
         };
 
@@ -129,34 +122,25 @@ impl Downloader<'_> {
             }
         }
 
-        let part_path = provisional_path.with_extension("part");
-        let meta_path = provisional_path.with_extension("part.meta");
-
-        let (mut etag, mut last_modified) = if fs::try_exists(&meta_path).await? {
-            let data = fs::read_to_string(&meta_path).await?;
-            let meta: Meta = serde_json::from_str(&data).unwrap();
-            (meta.etag, meta.last_modified)
-        } else {
-            (None, None)
-        };
+        let (part_path, meta_path) = ResumeSupport::get_part_paths(&provisional_path);
+        let (mut etag, mut last_modified) = ResumeSupport::read_metadata(&meta_path).await?;
 
         let mut attempt = 0;
-        loop {
-            let mut downloaded = if fs::try_exists(&part_path).await? {
-                fs::metadata(&part_path).await?.len()
-            } else {
-                0
-            };
+        let mut downloaded = if fs::try_exists(&part_path).await? {
+            fs::metadata(&part_path).await?.len()
+        } else {
+            0
+        };
 
-            let mut request = self.client.get(url.clone());
-            request = request.header(RANGE, format!("bytes={}-", downloaded));
-            if let Some(ref etag) = etag {
-                request = request.header(IF_RANGE, etag);
-            }
-            if let Some(ref last_modified) = last_modified {
-                request = request.header(IF_RANGE, last_modified);
-            }
-            let response = request
+        loop {
+            let mut headers = HeaderMap::new();
+
+            ResumeSupport::prepare_resume_headers(&mut headers, downloaded, &etag, &last_modified);
+
+            let response = self
+                .client
+                .get(url.clone())
+                .headers(headers.clone())
                 .send()
                 .await
                 .map_err(|err| DownloadError::NetworkError { source: err })?;
@@ -173,17 +157,20 @@ impl Downloader<'_> {
                 .get(LAST_MODIFIED)
                 .and_then(|h| h.to_str().ok())
                 .map(String::from);
-            let changed = (etag.is_some() && remote_etag.is_some() && etag != remote_etag)
-                || (last_modified.is_some()
-                    && last_modified.is_some()
-                    && last_modified != remote_modified);
 
-            // If Range not satisfiable or resource changed, clear and retry once
-            if (status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE || changed) && attempt == 0 {
+            if ResumeSupport::should_restart_download(
+                status,
+                &etag,
+                &last_modified,
+                &remote_etag,
+                &remote_modified,
+            ) && attempt == 0
+            {
                 fs::remove_file(&part_path).await.ok();
                 fs::remove_file(&meta_path).await.ok();
                 etag = remote_etag.clone();
                 last_modified = remote_modified.clone();
+                downloaded = 0;
                 attempt += 1;
                 continue;
             }
@@ -212,7 +199,7 @@ impl Downloader<'_> {
                 .headers()
                 .get(CONTENT_DISPOSITION)
                 .and_then(|header| header.to_str().ok())
-                .and_then(|header| extract_filename(header));
+                .and_then(extract_filename);
 
             if let Some(name) = header_name {
                 provisional_path = if let Some(ref dir) = final_dir {
@@ -244,29 +231,16 @@ impl Downloader<'_> {
                 }
             }
 
-            let total_size = response
-                .headers()
-                .get(CONTENT_RANGE)
-                .and_then(|h| h.to_str().ok())
-                .and_then(|range| range.rsplit_once('/').and_then(|(_, tot)| tot.parse().ok()))
-                .or_else(|| response.content_length())
-                .unwrap_or(0);
+            let (should_truncate, total_size) =
+                ResumeSupport::extract_range_info(&response, downloaded);
 
-            let should_truncate = response
-                .headers()
-                .get(CONTENT_RANGE)
-                .and_then(|h| h.to_str().ok())
-                .and_then(|r| r.split_whitespace().nth(1))
-                .and_then(|range| range.split('/').next())
-                .and_then(|se| se.split('-').next())
-                .and_then(|s| s.parse::<u64>().ok())
-                .map_or(false, |start| start != downloaded)
-                || status == reqwest::StatusCode::OK;
+            if let Some(ref callback) = options.progress_callback {
+                callback(DownloadState::Preparing(total_size));
+            }
 
-            let mut stream = response.bytes_stream();
-
-            let mut file = if should_truncate {
+            let mut file = if should_truncate || downloaded == 0 {
                 fs::remove_file(&part_path).await.ok();
+                downloaded = 0;
                 OpenOptions::new()
                     .create(true)
                     .write(true)
@@ -281,28 +255,20 @@ impl Downloader<'_> {
                     .await?
             };
 
-            let progress_callback = options.progress_callback;
+            ResumeSupport::write_metadata(&meta_path, remote_etag, remote_modified).await?;
 
-            if let Some(ref callback) = progress_callback {
-                callback(DownloadState::Preparing(total_size));
-            }
+            let mut stream = response.bytes_stream();
+            while let Some(chunk) = stream
+                .try_next()
+                .await
+                .map_err(|_| DownloadError::ChunkError)?
+            {
+                file.write_all(&chunk).await?;
+                downloaded += chunk.len() as u64;
 
-            let meta = Meta {
-                etag: remote_etag.clone(),
-                last_modified: remote_modified.clone(),
-            };
-            fs::write(&meta_path, serde_json::to_string(&meta).unwrap()).await?;
-
-            while let Some(chunk) = stream.next().await {
-                let bytes = chunk.map_err(|err| DownloadError::NetworkError { source: err })?;
-                file.write_all(&bytes).await?;
-                downloaded = downloaded.saturating_add(bytes.len() as u64);
-
-                if let Some(ref callback) = progress_callback {
+                if let Some(ref callback) = options.progress_callback {
                     callback(DownloadState::Progress(downloaded));
                 }
-
-                downloaded += bytes.len() as u64;
             }
 
             fs::rename(&part_path, &final_target).await?;
@@ -310,10 +276,6 @@ impl Downloader<'_> {
 
             if is_elf(&final_target).await {
                 fs::set_permissions(&final_target, Permissions::from_mode(0o755)).await?;
-            }
-
-            if let Some(ref callback) = progress_callback {
-                callback(DownloadState::Complete);
             }
 
             if options.extract_archive {
@@ -333,6 +295,10 @@ impl Downloader<'_> {
                     }
                 };
                 archive::extract_archive(&final_target, &extract_dir).await?;
+            }
+
+            if let Some(ref callback) = options.progress_callback {
+                callback(DownloadState::Complete);
             }
             return Ok(final_target.to_string_lossy().into());
         }
@@ -404,7 +370,11 @@ impl OciDownloader {
         let options = &self.options;
         let url = options.url.clone();
         let reference: Reference = url.into();
-        let oci_client = OciClient::new(&reference, options.api.clone());
+        let oci_client = OciClient::new(
+            &reference,
+            options.api.clone(),
+            self.options.file_mode.clone(),
+        );
 
         if reference.tag.starts_with("sha256:") {
             return self.download_blob(oci_client).await;

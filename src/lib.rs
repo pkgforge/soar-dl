@@ -6,4 +6,5 @@ pub mod gitlab;
 pub mod http_client;
 pub mod oci;
 pub mod platform;
+pub mod resume;
 pub mod utils;

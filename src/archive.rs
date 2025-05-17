@@ -47,14 +47,14 @@ pub async fn extract_archive<P: AsRef<Path>>(path: P, output_dir: P) -> Result<(
     };
 
     match format {
-        ArchiveFormat::Zip => extract_zip(path, &output_dir)
+        ArchiveFormat::Zip => extract_zip(path, output_dir)
             .await
-            .map_err(|err| DownloadError::ZipError(err)),
-        ArchiveFormat::Gz => extract_tar(path, &output_dir, flate2::read::GzDecoder::new).await,
-        ArchiveFormat::Xz => extract_tar(path, &output_dir, xz2::read::XzDecoder::new).await,
-        ArchiveFormat::Bz2 => extract_tar(path, &output_dir, bzip2::read::BzDecoder::new).await,
+            .map_err(DownloadError::ZipError),
+        ArchiveFormat::Gz => extract_tar(path, output_dir, flate2::read::GzDecoder::new).await,
+        ArchiveFormat::Xz => extract_tar(path, output_dir, xz2::read::XzDecoder::new).await,
+        ArchiveFormat::Bz2 => extract_tar(path, output_dir, bzip2::read::BzDecoder::new).await,
         ArchiveFormat::Zst => {
-            extract_tar(path, &output_dir, |f| {
+            extract_tar(path, output_dir, |f| {
                 zstd::stream::read::Decoder::new(f).unwrap()
             })
             .await
