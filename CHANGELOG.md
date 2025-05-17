@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.1] - 2025-05-17
+
+### Added
+
+- Add OCI resumability
+
+### Changed
+
+- Use async stdout
+- Set default overwrite prompt
+- Treat URL as direct link if only it has scheme and host
+
 ## [0.6.0] - 2025-05-04
 
 ### Added
@@ -129,6 +141,7 @@
 - Initialize soar-dl
 - Initial commit
 
+[0.6.1]: https://github.com/pkgforge/soar-dl/compare/v0.6.0..v0.6.1
 [0.6.0]: https://github.com/pkgforge/soar-dl/compare/v0.5.3..v0.6.0
 [0.5.3]: https://github.com/pkgforge/soar-dl/compare/v0.5.2..v0.5.3
 [0.5.2]: https://github.com/pkgforge/soar-dl/compare/v0.5.1..v0.5.2
