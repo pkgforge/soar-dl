@@ -1,13 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::Permissions,
-    io::Write,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
-use futures::{future::join_all, StreamExt, TryStreamExt};
+use futures::{future::join_all, TryStreamExt};
 use regex::Regex;
 use reqwest::header::{HeaderMap, CONTENT_DISPOSITION, ETAG, LAST_MODIFIED};
 
@@ -183,14 +182,16 @@ impl Downloader<'_> {
             }
 
             if options.output_path.as_deref() == Some("-") {
-                let stdout = std::io::stdout();
-                let mut stdout_lock = stdout.lock();
+                let mut stdout = tokio::io::stdout();
                 let mut stream = response.bytes_stream();
 
-                while let Some(chunk) = stream.next().await {
-                    let chunk = chunk.unwrap();
-                    stdout_lock.write_all(&chunk).unwrap();
-                    stdout_lock.flush().unwrap();
+                while let Some(chunk) = stream
+                    .try_next()
+                    .await
+                    .map_err(|_| DownloadError::ChunkError)?
+                {
+                    stdout.write_all(&chunk).await?;
+                    stdout.flush().await?;
                 }
                 return Ok("-".to_string());
             }
