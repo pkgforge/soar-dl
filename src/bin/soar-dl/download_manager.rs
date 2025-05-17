@@ -1,4 +1,4 @@
-use std::{io::Write, sync::Arc, thread, time::Duration};
+use std::{sync::Arc, thread, time::Duration};
 
 use indicatif::HumanBytes;
 use regex::Regex;
@@ -67,7 +67,7 @@ impl DownloadManager {
             extract_archive: self.args.extract,
             extract_dir: self.args.extract_dir.clone(),
             file_mode: get_file_mode(self.args.skip_existing, self.args.force_overwrite),
-            prompt: Arc::new(prompt_confirm),
+            prompt: None,
         }
     }
 
@@ -204,7 +204,7 @@ impl DownloadManager {
                             self.args.skip_existing,
                             self.args.force_overwrite,
                         ),
-                        prompt: Arc::new(prompt_confirm),
+                        prompt: None,
                     };
                     let _ = downloader
                         .download(options)
@@ -278,12 +278,4 @@ impl DownloadManager {
             }
         }
     }
-}
-
-fn prompt_confirm(file_name: &str) -> Result<bool, DownloadError> {
-    print!("Overwrite {}? [y/N] ", file_name);
-    std::io::stdout().flush()?;
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
-    Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
 }

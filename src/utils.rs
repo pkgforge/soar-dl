@@ -1,5 +1,6 @@
 use std::{
     env,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -11,6 +12,8 @@ use tokio::{
     io::{AsyncReadExt, BufReader},
 };
 use url::Url;
+
+use crate::error::DownloadError;
 
 pub const ELF_MAGIC_BYTES: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
@@ -143,4 +146,12 @@ pub fn get_file_mode(skip_existing: bool, force_overwrite: bool) -> FileMode {
     } else {
         FileMode::PromptOverwrite
     }
+}
+
+pub fn default_prompt_confirm(file_name: &str) -> Result<bool, DownloadError> {
+    print!("Overwrite {}? [y/N] ", file_name);
+    std::io::stdout().flush()?;
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
 }

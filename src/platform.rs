@@ -134,7 +134,7 @@ pub struct PlatformDownloadOptions {
     pub extract_archive: bool,
     pub extract_dir: Option<String>,
     pub file_mode: FileMode,
-    pub prompt: Arc<dyn Fn(&str) -> Result<bool, DownloadError> + Send + Sync + 'static>,
+    pub prompt: Option<Arc<dyn Fn(&str) -> Result<bool, DownloadError> + Send + Sync + 'static>>,
 }
 
 #[derive(Default)]

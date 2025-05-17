@@ -26,8 +26,8 @@ use crate::{
     http_client::SHARED_CLIENT,
     oci::{OciClient, OciLayer, OciManifest, Reference},
     utils::{
-        build_absolute_path, extract_filename, extract_filename_from_url, is_elf, matches_pattern,
-        FileMode,
+        build_absolute_path, default_prompt_confirm, extract_filename, extract_filename_from_url,
+        is_elf, matches_pattern, FileMode,
     },
 };
 
@@ -54,7 +54,7 @@ pub struct DownloadOptions {
     pub extract_archive: bool,
     pub extract_dir: Option<String>,
     pub file_mode: FileMode,
-    pub prompt: Arc<dyn Fn(&str) -> Result<bool, DownloadError> + Send + Sync + 'static>,
+    pub prompt: Option<Arc<dyn Fn(&str) -> Result<bool, DownloadError> + Send + Sync + 'static>>,
 }
 
 pub struct Downloader<'a> {
@@ -231,7 +231,13 @@ impl Downloader<'_> {
                     }
                     FileMode::PromptOverwrite => {
                         let target = final_target.to_string_lossy().to_string();
-                        if !(options.prompt)(&target)? {
+                        let proceed = if let Some(prompt) = &options.prompt {
+                            prompt(&target)?
+                        } else {
+                            default_prompt_confirm(&target)?
+                        };
+
+                        if !proceed {
                             return Ok(target);
                         }
                     }
