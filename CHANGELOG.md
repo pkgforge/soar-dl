@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.3] - 2025-06-03
+
+### Changed
+
+- Only create extract dir if the download is archive
+
+### Fixed
+
+- Fix file target when output path is provided
+
 ## [0.6.2] - 2025-06-01
 
 ### Changed
@@ -147,6 +157,7 @@
 - Initialize soar-dl
 - Initial commit
 
+[0.6.3]: https://github.com/pkgforge/soar-dl/compare/v0.6.2..v0.6.3
 [0.6.2]: https://github.com/pkgforge/soar-dl/compare/v0.6.1..v0.6.2
 [0.6.1]: https://github.com/pkgforge/soar-dl/compare/v0.6.0..v0.6.1
 [0.6.0]: https://github.com/pkgforge/soar-dl/compare/v0.5.3..v0.6.0
