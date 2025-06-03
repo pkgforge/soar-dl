@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::Permissions,
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -281,13 +281,7 @@ impl Downloader<'_> {
 
             if options.extract_archive {
                 let extract_dir = match &options.extract_dir {
-                    Some(path) => {
-                        let path = Path::new(path);
-                        if !path.is_dir() {
-                            fs::create_dir_all(path).await?;
-                        }
-                        path.to_path_buf()
-                    }
+                    Some(path) => PathBuf::from(path),
                     None => {
                         let path = build_absolute_path(&final_target)?;
                         path.parent()

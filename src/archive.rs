@@ -1,4 +1,4 @@
-use tokio::io::AsyncReadExt;
+use tokio::{fs, io::AsyncReadExt};
 use zip::result::ZipError;
 
 use crate::error::DownloadError;
@@ -45,6 +45,10 @@ pub async fn extract_archive<P: AsRef<Path>>(path: P, output_dir: P) -> Result<(
     let Some(format) = detect_archive_format(magic) else {
         return Ok(());
     };
+
+    if !output_dir.is_dir() {
+        fs::create_dir_all(output_dir).await?;
+    }
 
     match format {
         ArchiveFormat::Zip => extract_zip(path, output_dir)
