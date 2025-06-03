@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env,
     fs::Permissions,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
@@ -95,7 +96,7 @@ impl Downloader<'_> {
             result.to_hex().to_string()
         };
 
-        let (mut provisional_path, final_dir) = if let Some(ref out) = options.output_path {
+        let (provisional_path, final_dir) = if let Some(ref out) = options.output_path {
             if out.ends_with('/') {
                 let dir = PathBuf::from(out);
                 let base = extract_filename_from_url(&options.url).unwrap_or_else(hash_fallback);
@@ -202,14 +203,16 @@ impl Downloader<'_> {
                 .and_then(|header| header.to_str().ok())
                 .and_then(extract_filename);
 
-            if let Some(name) = header_name {
-                provisional_path = if let Some(ref dir) = final_dir {
-                    dir.join(name.clone())
-                } else {
-                    PathBuf::from(name.clone())
-                };
-            }
-            let final_target = provisional_path.clone();
+            let final_target = match &options.output_path {
+                Some(_) => provisional_path,
+                None => match header_name {
+                    Some(ref name) => final_dir
+                        .as_ref()
+                        .map(|dir| dir.join(name))
+                        .unwrap_or_else(|| PathBuf::from(name)),
+                    None => provisional_path,
+                },
+            };
 
             if final_target.exists() && !part_path.exists() {
                 match options.file_mode {
