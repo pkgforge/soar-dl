@@ -1,5 +1,8 @@
 name: soar-dl nightly
-
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+  
 on:
   push:
     branches:
@@ -121,7 +124,7 @@ jobs:
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2.4.0
         with:
-          subject-name: "nightly-soar-dl-${{ matrix.build.NAME }}"
+          subject-name: "soar-dl-nightly-${{ matrix.build.NAME }}"
           subject-path: |
             soar-dl-${{ matrix.build.NAME }}*
           show-summary: true
