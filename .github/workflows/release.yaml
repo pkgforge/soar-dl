@@ -4,10 +4,11 @@ concurrency:
   cancel-in-progress: true
   
 on:
-  workflow_dispatch:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+      
 permissions:
   attestations: write
   contents: write
