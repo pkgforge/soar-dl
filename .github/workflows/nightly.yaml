@@ -91,17 +91,17 @@ jobs:
           
       - name: Prepare release assets
         env:
-          ARTIFACT: "nightly/soar-dl-nightly-${{ matrix.build.NAME }}"
-          ARCHIVE: "soar-dl-nightly-${{ matrix.build.NAME }}.tar.gz"
+          ARTIFACT: "release/soar-dl-${{ matrix.build.NAME }}"
+          ARCHIVE: "soar-dl-${{ matrix.build.NAME }}.tar.gz"
         shell: bash
         run: |
-          mkdir -p nightly
-          cp {LICENSE,README.md} nightly/
+          mkdir -p release
+          cp {LICENSE,README.md} release/
           cp "target/${{ matrix.build.TARGET }}/release/soar-dl" "${ARTIFACT}"
           b3sum "${ARTIFACT}" > "${ARTIFACT}.b3sum"
           cp "${ARTIFACT}" .
           cp "${ARTIFACT}.b3sum" .
-          tar -czvf "${ARCHIVE}" nightly/
+          tar -czvf "${ARCHIVE}" release/
           b3sum "${ARCHIVE}" > "${ARCHIVE}.b3sum"
           bash -c 'realpath "${ARTIFACT}" ; realpath "${ARCHIVE}"' | xargs -I "{}" bash -c \
            'printf "\nFile: $(basename {})\n  Type: $(file -b {})\n  B3sum: $(b3sum {} | cut -d" " -f1)\n  SHA256sum: $(sha256sum {} | cut -d" " -f1)\n  Size: $(du -bh {} | cut -f1)\n"'
@@ -109,7 +109,7 @@ jobs:
       - name: Upload nightly binary
         uses: softprops/action-gh-release@v2
         with:
-          files: soar-dl-nightly-${{ matrix.build.NAME }}*
+          files: soar-dl-${{ matrix.build.NAME }}*
           tag_name: nightly
           name: ${{ steps.version.outputs.version }}
           body: "This is an automated nightly build of soar-dl."
@@ -121,7 +121,7 @@ jobs:
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2.4.0
         with:
-          subject-name: "soar-dl-nightly-${{ matrix.build.NAME }}"
+          subject-name: "nightly-soar-dl-${{ matrix.build.NAME }}"
           subject-path: |
-            soar-dl-nightly-${{ matrix.build.NAME }}*
+            soar-dl-${{ matrix.build.NAME }}*
           show-summary: true
