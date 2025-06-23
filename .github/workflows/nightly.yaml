@@ -109,7 +109,7 @@ jobs:
       - name: Upload nightly binary
         uses: softprops/action-gh-release@v2
         with:
-          files: nightly/*
+          files: soar-dl-nightly-${{ matrix.build.NAME }}*
           tag_name: nightly
           name: ${{ steps.version.outputs.version }}
           body: "This is an automated nightly build of soar-dl."
