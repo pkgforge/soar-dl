@@ -18,7 +18,7 @@ pub enum DownloadError {
     LayersNotFound,
     ChunkError,
     FileNameNotFound,
-    ZipError(zip::result::ZipError),
+    ArchiveError(compak::ArchiveError),
 }
 
 impl Display for DownloadError {
@@ -39,7 +39,7 @@ impl Display for DownloadError {
                     "Couldn't find filename. Please provide filename explicitly."
                 )
             }
-            DownloadError::ZipError(err) => write!(f, "Zip error: {}", err),
+            DownloadError::ArchiveError(err) => write!(f, "Archive error: {}", err),
         }
     }
 }
@@ -50,6 +50,7 @@ impl Error for DownloadError {
             DownloadError::IoError(err) => Some(err),
             DownloadError::InvalidUrl { source, .. } => Some(source),
             DownloadError::NetworkError { source } => Some(source),
+            DownloadError::ArchiveError(err) => Some(err),
             _ => None,
         }
     }
@@ -58,6 +59,12 @@ impl Error for DownloadError {
 impl From<io::Error> for DownloadError {
     fn from(value: io::Error) -> Self {
         Self::IoError(value)
+    }
+}
+
+impl From<compak::ArchiveError> for DownloadError {
+    fn from(value: compak::ArchiveError) -> Self {
+        Self::ArchiveError(value)
     }
 }
 

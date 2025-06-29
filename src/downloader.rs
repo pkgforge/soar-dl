@@ -1,12 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
-    env,
     fs::Permissions,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
+use compak::Archive;
 use futures::{future::join_all, TryStreamExt};
 use regex::Regex;
 use reqwest::header::{HeaderMap, CONTENT_DISPOSITION, ETAG, LAST_MODIFIED};
@@ -20,7 +20,6 @@ use tokio::{
 use url::Url;
 
 use crate::{
-    archive,
     error::DownloadError,
     http_client::SHARED_CLIENT,
     oci::{OciClient, OciLayer, OciManifest, Reference},
@@ -292,7 +291,8 @@ impl Downloader<'_> {
                             .unwrap_or_else(|| PathBuf::from("."))
                     }
                 };
-                archive::extract_archive(&final_target, &extract_dir).await?;
+                let archive = Archive::new(&final_target)?;
+                archive.extract_to(&extract_dir).await?;
             }
 
             if let Some(ref callback) = options.progress_callback {
